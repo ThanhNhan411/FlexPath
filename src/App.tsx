@@ -10,7 +10,7 @@
 
 import { useState, useEffect } from 'react';
 import { auth, loginWithGoogle } from './lib/firebase';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut, getRedirectResult } from 'firebase/auth';
 import { 
   Dumbbell, 
   History as HistoryIcon, 
@@ -60,6 +60,17 @@ export default function App() {
   });
 
   useEffect(() => {
+    // Process Firebase Redirect Sign-in result on page load (essential for mobile/Safari)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          setUser(result.user);
+        }
+      })
+      .catch((error) => {
+        console.error("Firebase Redirect Sign-in error:", error);
+      });
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
