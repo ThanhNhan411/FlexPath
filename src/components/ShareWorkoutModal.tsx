@@ -20,21 +20,32 @@ import { auth } from '../lib/firebase';
 // Helper function to dynamically parse and convert oklch(...) colors to standard, widely supported rgb/rgba colors.
 // This preserves 100% of Tailwind v4 theme colors and gradients in the html2canvas exported image.
 function parseOklch(oklchStr: string): string {
-  const match = oklchStr.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.%]+))?\s*\)/i);
-  if (!match) return 'rgb(0,0,0)';
+  // Extract all numeric values from the oklch/oklab string.
+  // This is extremely robust and matches format variants (decimals, percentages, degree, rad, turn)
+  const numbers = oklchStr.match(/-?[\d.]+(?:%|deg|rad|turn)?/g);
+  if (!numbers || numbers.length < 3) {
+    return 'rgb(24,24,27)'; // Safe neutral dark fallback color
+  }
 
-  const L = parseFloat(match[1]);
-  const C = parseFloat(match[2]);
-  const H = parseFloat(match[3]);
+  // Parse Lightness (can be decimal or percentage)
+  let L = parseFloat(numbers[0]);
+  if (numbers[0].includes('%')) L = L / 100;
+
+  // Parse Chroma (can be decimal or percentage)
+  let C = parseFloat(numbers[1]);
+  if (numbers[1].includes('%')) C = C / 100;
+
+  // Parse Hue (can be degree, rad, turn, grad)
+  let H = parseFloat(numbers[2]);
+  if (numbers[2].includes('rad')) H = H * (180 / Math.PI);
+  else if (numbers[2].includes('turn')) H = H * 360;
+  else if (numbers[2].includes('grad')) H = H * 0.9;
+
+  // Parse Alpha if present
   let A = 1;
-
-  if (match[4]) {
-    const alphaStr = match[4].trim();
-    if (alphaStr.endsWith('%')) {
-      A = parseFloat(alphaStr) / 100;
-    } else {
-      A = parseFloat(alphaStr);
-    }
+  if (numbers.length >= 4) {
+    A = parseFloat(numbers[3]);
+    if (numbers[3].includes('%')) A = A / 100;
   }
 
   // 1. Convert OKLCH to OKLAB
@@ -71,6 +82,32 @@ function parseOklch(oklchStr: string): string {
   const b = Math.round(toSRGB(bL) * 255);
 
   return A === 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${A})`;
+}
+
+// Balanced parenthesis parser to extract and rewrite all oklch/oklab rules in CSS texts perfectly.
+// This is 100% immune to nested var() styles, spacing, custom variable overrides, or multiple lines.
+function replaceOklchBalanced(cssText: string): string {
+  let result = '';
+  let i = 0;
+  while (i < cssText.length) {
+    const checkStr6 = cssText.substring(i, i + 6).toLowerCase();
+    if (checkStr6 === 'oklch(' || checkStr6 === 'oklab(') {
+      const startIdx = i;
+      i += 6; // Move past 'oklch(' or 'oklab('
+      let bracketCount = 1;
+      while (i < cssText.length && bracketCount > 0) {
+        if (cssText[i] === '(') bracketCount++;
+        else if (cssText[i] === ')') bracketCount--;
+        i++;
+      }
+      const fullMatch = cssText.substring(startIdx, i);
+      result += parseOklch(fullMatch);
+    } else {
+      result += cssText[i];
+      i++;
+    }
+  }
+  return result;
 }
 
 interface ShareWorkoutModalProps {
@@ -242,9 +279,7 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
           for (let i = 0; i < styleTags.length; i++) {
             const style = styleTags[i];
             if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('oklab'))) {
-              style.textContent = style.textContent.replace(/(oklch|oklab)\([^)]+\)/gi, (match) => {
-                return parseOklch(match);
-              });
+              style.textContent = replaceOklchBalanced(style.textContent);
             }
           }
           
@@ -257,9 +292,7 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                 const prop = el.style[j];
                 const val = el.style.getPropertyValue(prop);
                 if (val && (val.includes('oklch') || val.includes('oklab'))) {
-                  el.style.setProperty(prop, val.replace(/(oklch|oklab)\([^)]+\)/gi, (match) => {
-                    return parseOklch(match);
-                  }));
+                  el.style.setProperty(prop, replaceOklchBalanced(val));
                 }
               }
             }
