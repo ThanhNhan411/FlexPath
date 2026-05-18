@@ -14,7 +14,7 @@ import {
   Loader2,
   Check
 } from 'lucide-react';
-import { toBlob } from 'html-to-image';
+import html2canvas from 'html2canvas';
 import { Workout, ExerciseLog } from '../types';
 import { auth } from '../lib/firebase';
 
@@ -93,6 +93,7 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
   const [customImage, setCustomImage] = useState<string | null>(null);
   const [overlayOpacity, setOverlayOpacity] = useState(60); // percentage for custom image overlay
   const [isExporting, setIsExporting] = useState(false);
+  const [exportResultUrl, setExportResultUrl] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -164,7 +165,7 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
     }
   };
 
-  // Trigger Image Generation and Download
+  // Trigger Image Generation and Download using html2canvas
   const handleDownload = async () => {
     if (!cardRef.current) return;
     setIsExporting(true);
@@ -173,25 +174,26 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
       // Small timeout to allow DOM to settle and images to be fully loaded
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      const blob = await toBlob(cardRef.current, {
-        quality: 0.95,
-        pixelRatio: 2, // High resolution (double crisp)
-        cacheBust: false, // Turn off cacheBust to prevent base64 url corruption
+      const canvas = await html2canvas(cardRef.current, {
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        scale: 3, // Premium high-resolution 3x scale
+        logging: false,
       });
       
-      if (!blob) throw new Error('Failed to generate image blob');
-      
-      const dataUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const sanitizedName = workout.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      link.download = `flexpath_${sanitizedName}_${activeRatio.id.replace(':', '_')}_${new Date().toISOString().slice(0,10)}.png`;
-      link.href = dataUrl;
-      link.click();
-      
-      // Clean up local blob url memory
-      setTimeout(() => {
-        URL.revokeObjectURL(dataUrl);
-      }, 1000);
+      const dataUrl = canvas.toDataURL('image/png');
+      setExportResultUrl(dataUrl);
+
+      // Auto-trigger direct download for desktop users
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (!isMobile) {
+        const link = document.createElement('a');
+        const sanitizedName = workout.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        link.download = `flexpath_${sanitizedName}_${activeRatio.id.replace(':', '_')}_${new Date().toISOString().slice(0,10)}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
     } catch (error) {
       console.error('Failed to export image:', error);
       alert('Đã xảy ra lỗi khi tạo ảnh. Vui lòng thử lại!');
@@ -604,6 +606,61 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
           </div>
 
         </div>
+
+        {/* Real Fullscreen Image Preview for Safe Mobile Saving */}
+        <AnimatePresence>
+          {exportResultUrl && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 bg-black/95 backdrop-blur-lg flex flex-col items-center justify-center p-4 overflow-y-auto"
+            >
+              <div className="w-full max-w-sm flex flex-col items-center justify-center text-center space-y-4 my-auto">
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-white text-lg flex items-center justify-center gap-2">
+                    <Sparkles className="w-5 h-5 text-accent animate-pulse" />
+                    Ảnh Đã Sẵn Sàng!
+                  </h4>
+                  <p className="text-xs text-white/60 px-4 leading-relaxed">
+                    Trình duyệt di động hạn chế tải trực tiếp. Bạn hãy <span className="text-accent font-bold">ấn giữ (long-press) vào ảnh dưới đây</span> để lưu vào máy hoặc chia sẻ!
+                  </p>
+                </div>
+
+                {/* Generated Image Result Card */}
+                <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 max-h-[60vh] max-w-full bg-zinc-950 flex items-center justify-center">
+                  <img 
+                    src={exportResultUrl} 
+                    alt="FlexPath Workout Summary" 
+                    className="max-h-[60vh] object-contain mx-auto select-all pointer-events-auto" 
+                  />
+                </div>
+
+                <div className="flex gap-3 w-full pt-2">
+                  <button
+                    onClick={() => setExportResultUrl(null)}
+                    className="flex-1 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold uppercase tracking-wider transition-all"
+                  >
+                    Quay lại
+                  </button>
+                  <button
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      const sanitizedName = workout.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                      link.download = `flexpath_${sanitizedName}_${activeRatio.id.replace(':', '_')}_${new Date().toISOString().slice(0,10)}.png`;
+                      link.href = exportResultUrl;
+                      link.click();
+                    }}
+                    className="flex-1 py-3.5 rounded-xl bg-accent hover:bg-accent/90 text-white text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Tải về
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </motion.div>
     </div>
