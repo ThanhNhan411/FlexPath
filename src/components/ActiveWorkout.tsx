@@ -100,6 +100,168 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
 
   const [isFinishing, setIsFinishing] = useState(false);
 
+  // Voice Text-to-Speech Engine (Web Speech API)
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'vi-VN';
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Autopilot Mode States
+  const [isAutopilot, setIsAutopilot] = useState(false);
+  const [autopilotStatus, setAutopilotStatus] = useState<'idle' | 'preparing' | 'counting' | 'resting'>('idle');
+  const [activeLogIndex, setActiveLogIndex] = useState<number>(-1);
+  const [activeSetIndex, setActiveSetIndex] = useState<number>(-1);
+  const [currentRepCount, setCurrentRepCount] = useState<number>(0);
+  const [prepCountdown, setPrepCountdown] = useState(5);
+  const [autopilotPaused, setAutopilotPaused] = useState(false);
+  const [autopilotSpeed, setAutopilotSpeed] = useState(2.5); // seconds per rep
+  const [hasAnnouncedRestWarn, setHasAnnouncedRestWarn] = useState(false);
+
+  // Find next incomplete set
+  const findNextIncompleteSet = (currentLogs = logs) => {
+    for (let logIdx = 0; logIdx < currentLogs.length; logIdx++) {
+      const log = currentLogs[logIdx];
+      for (let setIdx = 0; setIdx < log.sets.length; setIdx++) {
+        if (!log.sets[setIdx].completed) {
+          return { logIdx, setIdx };
+        }
+      }
+    }
+    return null;
+  };
+
+  // Start Autopilot
+  const startAutopilot = () => {
+    if (logs.length === 0) {
+      speak("Vui lòng thêm ít nhất một bài tập để bắt đầu chế độ tự động.");
+      alert("Vui lòng thêm ít nhất một bài tập để bắt đầu chế độ tự động!");
+      return;
+    }
+    
+    const nextSet = findNextIncompleteSet();
+    if (!nextSet) {
+      speak("Tất cả các set tập đã được hoàn thành. Bạn có thể kết thúc buổi tập.");
+      alert("Tất cả các set tập đã được hoàn thành!");
+      return;
+    }
+
+    setIsAutopilot(true);
+    setAutopilotPaused(false);
+    setActiveLogIndex(nextSet.logIdx);
+    setActiveSetIndex(nextSet.setIdx);
+    setAutopilotStatus('preparing');
+    
+    const currentLog = logs[nextSet.logIdx];
+    const targetReps = currentLog.sets[nextSet.setIdx].reps;
+    speak(`Bắt đầu tập tự động bài ${currentLog.exerciseName}. Set thứ ${nextSet.setIdx + 1}. Mục tiêu ${targetReps} reps. Chuẩn bị tập trong 5 giây.`);
+  };
+
+  // Helper to advance Autopilot
+  const goToNextAutopilotSet = (currentLogs = logs) => {
+    const nextSet = findNextIncompleteSet(currentLogs);
+    if (nextSet) {
+      setActiveLogIndex(nextSet.logIdx);
+      setActiveSetIndex(nextSet.setIdx);
+      setAutopilotStatus('preparing');
+      
+      const currentLog = currentLogs[nextSet.logIdx];
+      const targetReps = currentLog.sets[nextSet.setIdx].reps;
+      speak(`Tiếp tục bài ${currentLog.exerciseName}. Set thứ ${nextSet.setIdx + 1}. Mục tiêu ${targetReps} reps. Chuẩn bị tập trong 5 giây.`);
+    } else {
+      setIsAutopilot(false);
+      setAutopilotStatus('idle');
+      speak("Chúc mừng bạn đã hoàn thành xuất sắc toàn bộ bài tập hôm nay! Bấm nút Xong ở góc trên để lưu kết quả tập luyện.");
+    }
+  };
+
+  // Effect to handle preparation countdown
+  useEffect(() => {
+    if (!isAutopilot || autopilotPaused || autopilotStatus !== 'preparing') return;
+
+    setPrepCountdown(5);
+    const interval = setInterval(() => {
+      setPrepCountdown(c => {
+        if (c <= 1) {
+          clearInterval(interval);
+          setAutopilotStatus('counting');
+          setCurrentRepCount(0);
+          speak("Bắt đầu tập!");
+          return 0;
+        }
+        if (c - 1 <= 3) {
+          speak((c - 1).toString());
+        }
+        return c - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isAutopilot, autopilotPaused, autopilotStatus, activeLogIndex, activeSetIndex]);
+
+  // Effect to handle rep counting
+  useEffect(() => {
+    if (!isAutopilot || autopilotPaused || autopilotStatus !== 'counting') return;
+    if (activeLogIndex === -1 || activeSetIndex === -1) return;
+
+    const currentLog = logs[activeLogIndex];
+    const targetReps = currentLog.sets[activeSetIndex].reps;
+
+    const interval = setInterval(() => {
+      setCurrentRepCount(rc => {
+        const nextRc = rc + 1;
+        speak(nextRc.toString());
+        
+        if (nextRc >= targetReps) {
+          clearInterval(interval);
+          // Set set as completed!
+          setTimeout(() => {
+            const newLogs = [...logs];
+            newLogs[activeLogIndex].sets[activeSetIndex].completed = true;
+            newLogs[activeLogIndex].sets[activeSetIndex].timestamp = new Date().toISOString();
+            setLogs(newLogs);
+            
+            speak(`Hoàn thành set! Tuyệt vời. Bắt đầu thời gian nghỉ.`);
+            
+            if (restDuration > 0) {
+              setRestTimer(restDuration);
+              setAutopilotStatus('resting');
+            } else {
+              goToNextAutopilotSet(newLogs);
+            }
+          }, 1000);
+          return targetReps;
+        }
+        return nextRc;
+      });
+    }, autopilotSpeed * 1000);
+
+    return () => clearInterval(interval);
+  }, [isAutopilot, autopilotPaused, autopilotStatus, activeLogIndex, activeSetIndex, autopilotSpeed, restDuration, logs]);
+
+  // Effect to handle rest countdown and next set transition
+  useEffect(() => {
+    if (!isAutopilot || autopilotStatus !== 'resting') {
+      setHasAnnouncedRestWarn(false);
+      return;
+    }
+
+    if (restTimer === 10 && !hasAnnouncedRestWarn) {
+      speak("Còn mười giây nghỉ. Chuẩn bị tập set tiếp theo.");
+      setHasAnnouncedRestWarn(true);
+    }
+
+    if (restTimer === 0) {
+      // Small delay to let the timer settle
+      goToNextAutopilotSet();
+    }
+  }, [restTimer, isAutopilot, autopilotStatus, hasAnnouncedRestWarn]);
+
   const [isPickingExercise, setIsPickingExercise] = useState(false);
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState('All');
@@ -204,12 +366,15 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
   useEffect(() => {
     let interval: any;
     if (restTimer !== null && restTimer > 0) {
-      interval = setInterval(() => setRestTimer(t => (t !== null ? t - 1 : null)), 1000);
+      const shouldTick = !(isAutopilot && autopilotPaused);
+      if (shouldTick) {
+        interval = setInterval(() => setRestTimer(t => (t !== null ? t - 1 : null)), 1000);
+      }
     } else if (restTimer === 0) {
       setRestTimer(null);
     }
     return () => clearInterval(interval);
-  }, [restTimer]);
+  }, [restTimer, isAutopilot, autopilotPaused]);
 
   const resetPickerFilters = () => {
     setSelectedMuscle('All');
@@ -324,6 +489,158 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
               <span className="font-mono font-bold text-sm">+15s</span>
             </button>
           </div>
+        </div>
+
+        {/* Autopilot Control Panel */}
+        <div className={cn(
+          "glass-panel p-5 border relative overflow-hidden transition-all duration-300",
+          isAutopilot 
+            ? "border-amber-500/30 bg-amber-500/5 shadow-lg shadow-amber-500/5" 
+            : "border-accent/10 hover:border-accent/20"
+        )}>
+          {/* Neon accent glow behind card if autopilot is active */}
+          {isAutopilot && (
+            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full filter blur-2xl pointer-events-none -mr-10 -mt-10" />
+          )}
+
+          {!isAutopilot ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-md shadow-orange-500/20 shrink-0">
+                  <TimerIcon className="w-6 h-6 text-white animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-base text-white flex items-center gap-2">
+                    FlexPath Autopilot
+                    <span className="text-[10px] font-bold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">Premium</span>
+                  </h4>
+                  <p className="text-xs text-brand/60 mt-1 leading-relaxed">
+                    Chế độ tập Rảnh tay: Voice AI tự động nhắc chuẩn bị, đếm rep nhịp nhàng và kích hoạt thời gian nghỉ mà không cần chạm tay vào màn hình.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={startAutopilot}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-ink font-bold text-sm tracking-wide shadow-lg shadow-orange-500/15 hover:scale-[1.03] active:scale-[0.97] transition-all whitespace-nowrap"
+              >
+                Bật Chế Độ Tự Động
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className={cn(
+                      "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                      autopilotPaused ? "bg-amber-500" : "bg-green-500"
+                    )}></span>
+                    <span className={cn(
+                      "relative inline-flex rounded-full h-2.5 w-2.5",
+                      autopilotPaused ? "bg-amber-500" : "bg-green-500"
+                    )}></span>
+                  </span>
+                  <span className="text-xs font-mono uppercase tracking-widest text-brand/80">
+                    {autopilotPaused ? 'Tạm Dừng Autopilot' : 'Autopilot Đang Chạy'}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAutopilotPaused(!autopilotPaused)}
+                    className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold transition-all text-white border border-white/10"
+                  >
+                    {autopilotPaused ? 'Tiếp Tục' : 'Tạm Dừng'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsAutopilot(false);
+                      setAutopilotStatus('idle');
+                      speak("Đã tắt chế độ tự động.");
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-bold transition-all"
+                  >
+                    Tắt
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-mono uppercase text-brand/40 tracking-wider">Bài tập hiện tại</p>
+                  <h5 className="font-bold text-lg text-white">
+                    {logs[activeLogIndex]?.exerciseName || '---'}
+                  </h5>
+                  <p className="text-xs text-brand/60 font-mono">
+                    Set {activeSetIndex + 1} của {logs[activeLogIndex]?.sets.length} • Mục tiêu {logs[activeLogIndex]?.sets[activeSetIndex]?.reps} Reps
+                  </p>
+                </div>
+
+                <div className="bg-white/5 rounded-xl p-3.5 flex flex-col justify-center items-center text-center relative border border-white/5 min-h-[110px]">
+                  {autopilotStatus === 'preparing' && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-mono uppercase text-amber-400 tracking-wider animate-pulse">Đang chuẩn bị</p>
+                      <h4 className="text-3xl font-extrabold text-white font-mono animate-bounce">{prepCountdown}s</h4>
+                      <p className="text-[10px] text-brand/40">Vào tư thế sẵn sàng!</p>
+                    </div>
+                  )}
+
+                  {autopilotStatus === 'counting' && (
+                    <div className="w-full space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-mono text-brand/50 uppercase tracking-widest">Đang đếm reps</span>
+                        <span className="font-bold text-amber-400 font-mono">{currentRepCount} / {logs[activeLogIndex]?.sets[activeSetIndex]?.reps}</span>
+                      </div>
+                      <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-300"
+                          style={{ width: `${(currentRepCount / (logs[activeLogIndex]?.sets[activeSetIndex]?.reps || 1)) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-brand/40 font-mono tracking-wide">Nhịp đếm: {autopilotSpeed}s/rep</p>
+                    </div>
+                  )}
+
+                  {autopilotStatus === 'resting' && (
+                    <div className="space-y-1 animate-pulse">
+                      <p className="text-[10px] font-mono uppercase text-green-400 tracking-wider">Đang nghỉ ngơi</p>
+                      <h4 className="text-3xl font-extrabold text-white font-mono">{restTimer || 0}s</h4>
+                      <button
+                        onClick={() => {
+                          setRestTimer(null);
+                          goToNextAutopilotSet();
+                        }}
+                        className="text-[9px] font-bold uppercase tracking-wider text-amber-500/70 hover:text-amber-400 underline underline-offset-2 mt-1"
+                      >
+                        Bỏ qua nghỉ để tập tiếp
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Adjust counter speed */}
+              <div className="pt-2 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-brand/50">Tốc độ đếm Rep (Nhịp tập):</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button 
+                    onClick={() => setAutopilotSpeed(s => Math.max(1.5, Number((s - 0.5).toFixed(1))))}
+                    disabled={autopilotSpeed <= 1.5}
+                    className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center font-bold text-xs disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  >
+                    -0.5s
+                  </button>
+                  <span className="text-xs font-mono font-bold text-amber-400">{autopilotSpeed} giây / rep</span>
+                  <button 
+                    onClick={() => setAutopilotSpeed(s => Math.min(5.0, Number((s + 0.5).toFixed(1))))}
+                    disabled={autopilotSpeed >= 5.0}
+                    className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center font-bold text-xs disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                  >
+                    +0.5s
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {logs.map((log) => (
