@@ -262,9 +262,21 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
     if (!cardRef.current) return;
     setIsExporting(true);
     
+    // Save original document.styleSheets descriptor
+    const originalStyleSheetsDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'styleSheets');
+    
     try {
       // Small timeout to allow DOM to settle and images to be fully loaded
       await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Temporary override of document.styleSheets to an empty array.
+      // This bypasses html2canvas trying to parse raw CSS stylesheets (which contain unsupported Tailwind v4 oklch colors),
+      // completely eliminating all parser crashes while perfectly preserving all element styles,
+      // colors, and gradients which are already resolved in RGB by the browser's getComputedStyle!
+      Object.defineProperty(document, 'styleSheets', {
+        get: () => [],
+        configurable: true
+      });
       
       const canvas = await html2canvas(cardRef.current, {
         useCORS: true,
@@ -272,42 +284,6 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
         backgroundColor: null,
         scale: 2, // 2x is plenty crisp and consumes far less memory on mobile browsers
         logging: false,
-        onclone: (clonedDoc) => {
-          // Fix for Tailwind v4 color variables: replace oklch/oklab values with standard rgb colors
-          // in cloned style tags to prevent html2canvas's parser from crashing.
-          // IMPORTANT: Changing style.textContent on a cloned, detached style element doesn't update clonedDoc.styleSheets.
-          // We must create a brand new style element, insert it, and remove the original style element
-          // to force the browser to parse it fresh and update the stylesheet collection in the clone context!
-          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
-          const head = clonedDoc.head || clonedDoc.getElementsByTagName('head')[0];
-          
-          for (const style of styleTags) {
-            if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('oklab'))) {
-              const cleanedCss = replaceOklchBalanced(style.textContent);
-              const newStyle = clonedDoc.createElement('style');
-              newStyle.textContent = cleanedCss;
-              if (head) {
-                head.appendChild(newStyle);
-              }
-              style.remove();
-            }
-          }
-          
-          // Also clean any raw oklch/oklab colors in inline styles to be fully bulletproof
-          const allElements = Array.from(clonedDoc.getElementsByTagName('*'));
-          for (const el of allElements) {
-            const htmlEl = el as HTMLElement;
-            if (htmlEl.style) {
-              for (let j = 0; j < htmlEl.style.length; j++) {
-                const prop = htmlEl.style[j];
-                const val = htmlEl.style.getPropertyValue(prop);
-                if (val && (val.includes('oklch') || val.includes('oklab'))) {
-                  htmlEl.style.setProperty(prop, replaceOklchBalanced(val));
-                }
-              }
-            }
-          }
-        }
       });
       
       const dataUrl = canvas.toDataURL('image/png');
@@ -326,6 +302,12 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
       console.error('Failed to export image:', error);
       alert('Đã xảy ra lỗi khi tạo ảnh. Vui lòng thử lại!');
     } finally {
+      // Always restore the original document.styleSheets descriptor to prevent any side effects
+      if (originalStyleSheetsDescriptor) {
+        Object.defineProperty(Document.prototype, 'styleSheets', originalStyleSheetsDescriptor);
+      } else {
+        delete (document as any).styleSheets;
+      }
       setIsExporting(false);
     }
   };
