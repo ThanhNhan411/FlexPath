@@ -176,9 +176,9 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
       
       const canvas = await html2canvas(cardRef.current, {
         useCORS: true,
-        allowTaint: true,
+        allowTaint: false, // Must be false to guarantee toDataURL doesn't throw SecurityError
         backgroundColor: null,
-        scale: 3, // Premium high-resolution 3x scale
+        scale: 2, // 2x is plenty crisp and consumes far less memory on mobile browsers
         logging: false,
       });
       
@@ -401,13 +401,21 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                 <div className={`flex justify-between items-center pt-3 border-t ${dividerColor} mt-auto`}>
                   <div className="flex items-center gap-2">
                     {user?.photoURL ? (
-                      <img 
-                        src={user.photoURL} 
-                        alt="" 
-                        className={`w-6 h-6 rounded-full border ${isCyberpunk ? 'border-zinc-950/20' : 'border-white/10'}`} 
-                      />
+                      <div className="relative w-6 h-6 shrink-0">
+                        {/* Local icon rendered underneath as a secure fallback in the canvas export */}
+                        <div className={`absolute inset-0 rounded-full flex items-center justify-center text-[10px] font-bold ${isCyberpunk ? 'bg-zinc-950 text-yellow-400' : 'bg-white/10 text-white'}`}>
+                          <User className="w-3.5 h-3.5" />
+                        </div>
+                        {/* Real Google Avatar ignored during canvas render to guarantee 100% cross-origin safety */}
+                        <img 
+                          src={user.photoURL} 
+                          alt="" 
+                          data-html2canvas-ignore="true"
+                          className={`absolute inset-0 w-full h-full rounded-full border object-cover ${isCyberpunk ? 'border-zinc-950/20' : 'border-white/10'}`} 
+                        />
+                      </div>
                     ) : (
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isCyberpunk ? 'bg-zinc-950 text-yellow-400' : 'bg-white/10 text-white'}`}>
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${isCyberpunk ? 'bg-zinc-950 text-yellow-400' : 'bg-white/10 text-white'}`}>
                         <User className="w-3.5 h-3.5" />
                       </div>
                     )}
