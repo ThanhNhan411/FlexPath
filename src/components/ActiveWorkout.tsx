@@ -171,6 +171,36 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
     return () => clearInterval(interval);
   }, [paused]);
 
+  // Real-time synchronization when app resumes from background (mobile lock screen / tab suspension)
+  useEffect(() => {
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const saved = localStorage.getItem('activeWorkoutState');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.timestamp && !parsed.paused) {
+              const elapsedSinceLastTick = Math.floor((Date.now() - parsed.timestamp) / 1000);
+              if (elapsedSinceLastTick > 0) {
+                setSessionTime(parsed.sessionTime + elapsedSinceLastTick);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error syncing real-time timer:', e);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+    window.addEventListener('focus', handleVisibilitySync);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.removeEventListener('focus', handleVisibilitySync);
+    };
+  }, []);
+
   useEffect(() => {
     let interval: any;
     if (restTimer !== null && restTimer > 0) {
