@@ -472,7 +472,7 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory }: Dashboar
             exit={{ opacity: 0, x: '100%' }}
             className="fixed inset-0 z-[70] bg-ink flex flex-col md:max-w-xl md:left-auto md:border-l md:border-white/10"
           >
-             <header className="p-6 border-b border-white/5 flex items-center justify-between sticky top-0 bg-ink/80 backdrop-blur-xl z-20 pt-[calc(1.5rem+env(safe-area-inset-top))]">
+             <header className="absolute top-0 left-0 right-0 p-6 border-b border-white/5 flex items-center justify-between bg-ink/80 backdrop-blur-xl z-20 pt-[calc(1.5rem+env(safe-area-inset-top))]">
                 <button 
                   onClick={() => setSelectedWorkout(null)}
                   className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest opacity-50 hover:opacity-100"
@@ -485,7 +485,7 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory }: Dashboar
                 </div>
              </header>
 
-             <div className="flex-grow overflow-y-auto p-6 space-y-8 pb-32">
+             <div className="flex-grow overflow-y-auto p-6 pt-[calc(6.5rem+env(safe-area-inset-top))] space-y-8 pb-32">
                 <div className="grid grid-cols-2 gap-4">
                    <div className="glass-panel p-6 text-center">
                       <p className="text-[10px] uppercase font-mono tracking-widest text-brand/40 mb-2">Tổng khối lượng</p>

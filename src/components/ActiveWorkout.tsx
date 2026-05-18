@@ -249,7 +249,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
           exit={{ opacity: 0, y: '100%' }}
           className={cn("fixed inset-0 z-[60] bg-ink flex flex-col", minimized && "hidden")}
         >
-          <header className="p-6 border-b border-white/5 flex items-center justify-between bg-ink/50 backdrop-blur-xl sticky top-0 z-10 pt-[calc(1.5rem+env(safe-area-inset-top))]">
+          <header className="absolute top-0 left-0 right-0 p-6 border-b border-white/5 flex items-center justify-between bg-ink/50 backdrop-blur-xl z-10 pt-[calc(1.5rem+env(safe-area-inset-top))]">
             <div className="flex items-center gap-4">
               <button onClick={onMinimize} className="opacity-50 hover:opacity-100 transition-opacity">
                 <ChevronDown className="w-6 h-6" />
@@ -273,7 +273,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
         </button>
       </header>
 
-      <div className="flex-grow overflow-y-auto p-4 space-y-6 pb-40">
+      <div className="flex-grow overflow-y-auto p-4 pt-[calc(6.5rem+env(safe-area-inset-top))] space-y-6 pb-40">
         <div className="glass-panel p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-accent/20">
           <div className="flex items-center gap-3">
             <TimerIcon className="w-5 h-5 text-accent" />
