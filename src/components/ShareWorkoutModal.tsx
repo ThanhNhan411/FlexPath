@@ -275,24 +275,34 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
         onclone: (clonedDoc) => {
           // Fix for Tailwind v4 color variables: replace oklch/oklab values with standard rgb colors
           // in cloned style tags to prevent html2canvas's parser from crashing.
-          const styleTags = clonedDoc.getElementsByTagName('style');
-          for (let i = 0; i < styleTags.length; i++) {
-            const style = styleTags[i];
+          // IMPORTANT: Changing style.textContent on a cloned, detached style element doesn't update clonedDoc.styleSheets.
+          // We must create a brand new style element, insert it, and remove the original style element
+          // to force the browser to parse it fresh and update the stylesheet collection in the clone context!
+          const styleTags = Array.from(clonedDoc.getElementsByTagName('style'));
+          const head = clonedDoc.head || clonedDoc.getElementsByTagName('head')[0];
+          
+          for (const style of styleTags) {
             if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('oklab'))) {
-              style.textContent = replaceOklchBalanced(style.textContent);
+              const cleanedCss = replaceOklchBalanced(style.textContent);
+              const newStyle = clonedDoc.createElement('style');
+              newStyle.textContent = cleanedCss;
+              if (head) {
+                head.appendChild(newStyle);
+              }
+              style.remove();
             }
           }
           
           // Also clean any raw oklch/oklab colors in inline styles to be fully bulletproof
-          const allElements = clonedDoc.getElementsByTagName('*');
-          for (let i = 0; i < allElements.length; i++) {
-            const el = allElements[i] as HTMLElement;
-            if (el.style) {
-              for (let j = 0; j < el.style.length; j++) {
-                const prop = el.style[j];
-                const val = el.style.getPropertyValue(prop);
+          const allElements = Array.from(clonedDoc.getElementsByTagName('*'));
+          for (const el of allElements) {
+            const htmlEl = el as HTMLElement;
+            if (htmlEl.style) {
+              for (let j = 0; j < htmlEl.style.length; j++) {
+                const prop = htmlEl.style[j];
+                const val = htmlEl.style.getPropertyValue(prop);
                 if (val && (val.includes('oklch') || val.includes('oklab'))) {
-                  el.style.setProperty(prop, replaceOklchBalanced(val));
+                  htmlEl.style.setProperty(prop, replaceOklchBalanced(val));
                 }
               }
             }
