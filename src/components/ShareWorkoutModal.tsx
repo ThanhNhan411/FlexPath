@@ -14,101 +14,9 @@ import {
   Loader2,
   Check
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 import { Workout, ExerciseLog } from '../types';
 import { auth } from '../lib/firebase';
-// Helper function to dynamically parse and convert oklch(...) colors to standard, widely supported rgb/rgba colors.
-// This preserves 100% of Tailwind v4 theme colors and gradients in the html2canvas exported image.
-function parseOklch(oklchStr: string): string {
-  // Extract all numeric values from the oklch/oklab string.
-  // This is extremely robust and matches format variants (decimals, percentages, degree, rad, turn)
-  const numbers = oklchStr.match(/-?[\d.]+(?:%|deg|rad|turn)?/g);
-  if (!numbers || numbers.length < 3) {
-    return 'rgb(24,24,27)'; // Safe neutral dark fallback color
-  }
-
-  // Parse Lightness (can be decimal or percentage)
-  let L = parseFloat(numbers[0]);
-  if (numbers[0].includes('%')) L = L / 100;
-
-  // Parse Chroma (can be decimal or percentage)
-  let C = parseFloat(numbers[1]);
-  if (numbers[1].includes('%')) C = C / 100;
-
-  // Parse Hue (can be degree, rad, turn, grad)
-  let H = parseFloat(numbers[2]);
-  if (numbers[2].includes('rad')) H = H * (180 / Math.PI);
-  else if (numbers[2].includes('turn')) H = H * 360;
-  else if (numbers[2].includes('grad')) H = H * 0.9;
-
-  // Parse Alpha if present
-  let A = 1;
-  if (numbers.length >= 4) {
-    A = parseFloat(numbers[3]);
-    if (numbers[3].includes('%')) A = A / 100;
-  }
-
-  // 1. Convert OKLCH to OKLAB
-  const hRad = (H * Math.PI) / 180;
-  const l_ = L;
-  const a_ = C * Math.cos(hRad);
-  const b_ = C * Math.sin(hRad);
-
-  // 2. Convert OKLAB to LMS
-  const l1 = l_ + 0.3963377774 * a_ + 0.2158037573 * b_;
-  const m1 = l_ - 0.1055613458 * a_ - 0.0638541728 * b_;
-  const s1 = l_ - 0.0894841775 * a_ - 1.2914855480 * b_;
-
-  // 3. Cube LMS
-  const l2 = Math.pow(l1, 3);
-  const m2 = Math.pow(m1, 3);
-  const s2 = Math.pow(s1, 3);
-
-  // 4. Convert LMS to linear sRGB
-  const rL = +4.0767416621 * l2 - 3.3077115913 * m2 + 0.2309699292 * s2;
-  const gL = -1.2684380046 * l2 + 2.6097574011 * m2 - 0.3413193965 * s2;
-  const bL = -0.0041960863 * l2 - 0.7034186145 * m2 + 1.7076147010 * s2;
-
-  // Helper to convert linear color component to standard sRGB
-  const toSRGB = (c: number) => {
-    const clamped = Math.max(0, Math.min(1, c));
-    return clamped <= 0.0031308
-      ? 12.92 * clamped
-      : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055;
-  };
-
-  const r = Math.round(toSRGB(rL) * 255);
-  const g = Math.round(toSRGB(gL) * 255);
-  const b = Math.round(toSRGB(bL) * 255);
-
-  return A === 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${A})`;
-}
-
-// Balanced parenthesis parser to extract and rewrite all oklch/oklab rules in CSS texts perfectly.
-// This is 100% immune to nested var() styles, spacing, custom variable overrides, or multiple lines.
-function replaceOklchBalanced(cssText: string): string {
-  let result = '';
-  let i = 0;
-  while (i < cssText.length) {
-    const checkStr6 = cssText.substring(i, i + 6).toLowerCase();
-    if (checkStr6 === 'oklch(' || checkStr6 === 'oklab(') {
-      const startIdx = i;
-      i += 6; // Move past 'oklch(' or 'oklab('
-      let bracketCount = 1;
-      while (i < cssText.length && bracketCount > 0) {
-        if (cssText[i] === '(') bracketCount++;
-        else if (cssText[i] === ')') bracketCount--;
-        i++;
-      }
-      const fullMatch = cssText.substring(startIdx, i);
-      result += parseOklch(fullMatch);
-    } else {
-      result += cssText[i];
-      i++;
-    }
-  }
-  return result;
-}
 
 interface ShareWorkoutModalProps {
   isOpen: boolean;
@@ -257,36 +165,30 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
     }
   };
 
-  // Trigger Image Generation and Download using html2canvas
+  // Trigger Image Generation and Download using html-to-image
   const handleDownload = async () => {
     if (!cardRef.current) return;
     setIsExporting(true);
-    
-    // Save original document.styleSheets descriptor
-    const originalStyleSheetsDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, 'styleSheets');
     
     try {
       // Small timeout to allow DOM to settle and images to be fully loaded
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      // Temporary override of document.styleSheets to an empty array.
-      // This bypasses html2canvas trying to parse raw CSS stylesheets (which contain unsupported Tailwind v4 oklch colors),
-      // completely eliminating all parser crashes while perfectly preserving all element styles,
-      // colors, and gradients which are already resolved in RGB by the browser's getComputedStyle!
-      Object.defineProperty(document, 'styleSheets', {
-        get: () => [],
-        configurable: true
+      const dataUrl = await toPng(cardRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        style: {
+          transform: 'translateZ(0)',
+        },
+        // Exclude the profile avatar to prevent CORS taint issues
+        filter: (node) => {
+          if (node instanceof HTMLElement) {
+            return node.getAttribute('data-html2canvas-ignore') !== 'true';
+          }
+          return true;
+        }
       });
       
-      const canvas = await html2canvas(cardRef.current, {
-        useCORS: true,
-        allowTaint: false, // Must be false to guarantee toDataURL doesn't throw SecurityError
-        backgroundColor: null,
-        scale: 2, // 2x is plenty crisp and consumes far less memory on mobile browsers
-        logging: false,
-      });
-      
-      const dataUrl = canvas.toDataURL('image/png');
       setExportResultUrl(dataUrl);
 
       // Auto-trigger direct download for desktop users
@@ -302,12 +204,6 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
       console.error('Failed to export image:', error);
       alert('Đã xảy ra lỗi khi tạo ảnh. Vui lòng thử lại!');
     } finally {
-      // Always restore the original document.styleSheets descriptor to prevent any side effects
-      if (originalStyleSheetsDescriptor) {
-        Object.defineProperty(Document.prototype, 'styleSheets', originalStyleSheetsDescriptor);
-      } else {
-        delete (document as any).styleSheets;
-      }
       setIsExporting(false);
     }
   };
