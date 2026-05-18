@@ -1,0 +1,108 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 1. Users
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && 
+        incoming().email is string &&
+        incoming().createdAt is string;
+      allow update: if isOwner(userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
+    }
+
+    // 2. Exercises (Read-only for users)
+    match /exercises/{exerciseId} {
+      allow read: if isSignedIn();
+    }
+
+    // 3. Workouts
+    match /workouts/{workoutId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() && 
+        incoming().userId == request.auth.uid &&
+        incoming().status in ['active', 'completed'] &&
+        incoming().startTime is string;
+        
+      allow update: if isSignedIn() && 
+        existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId && (
+          // Action: Complete
+          (incoming().status == 'completed' && incoming().diff(existing()).affectedKeys().hasAll(['status', 'endTime'])) ||
+          // Action: Edit Notes
+          (incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'name', 'totalVolume']))
+        );
+        
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+
+      // 4. Logs (Subcollection)
+      match /logs/{logId} {
+        allow read, write: if isWorkoutOwner(workoutId);
+      }
+    }
+
+    // 4. Workout Templates
+    match /workout_templates/{templateId} {
+      allow get: if isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() && 
+        incoming().userId == request.auth.uid &&
+        incoming().name is string &&
+        incoming().name.size() > 0 &&
+        incoming().exercises is list;
+        
+      allow update: if isSignedIn() && 
+        existing().userId == request.auth.uid &&
+        incoming().userId == existing().userId;
+        
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    // 5. Health Profiles
+    match /health_profiles/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && 
+        incoming().height is number &&
+        incoming().weight is number &&
+        incoming().age is number &&
+        incoming().gender is string &&
+        incoming().updatedAt is string;
+      allow update: if isOwner(userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['height', 'weight', 'age', 'gender', 'bmi', 'updatedAt']);
+    }
+
+    function isWorkoutOwner(workoutId) {
+      return isSignedIn() && get(/databases/$(database)/documents/workouts/$(workoutId)).data.userId == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile records",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "Exercise": {
+      "title": "Exercise",
+      "description": "Definition of an available exercise",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "equipment": { "type": "string" },
+        "image": { "type": "string" }
+      },
+      "required": ["name", "category"]
+    },
+    "Workout": {
+      "title": "Workout",
+      "description": "A workout session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled"] }
+      },
+      "required": ["userId", "startTime", "status"]
+    },
+    "ExerciseLog": {
+      "title": "ExerciseLog",
+      "description": "Sets performed for a specific exercise in a workout",
+      "type": "object",
+      "properties": {
+        "exerciseId": { "type": "string" },
+        "exerciseName": { "type": "string" },
+        "order": { "type": "number" },
+        "sets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reps": { "type": "number" },
+              "weight": { "type": "number" },
+              "completed": { "type": "boolean" },
+              "timestamp": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "required": ["exerciseId", "exerciseName", "order"]
+    },
+    "WorkoutTemplate": {
+      "title": "WorkoutTemplate",
+      "description": "A saved workout routine template",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "exercises": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "exerciseId": { "type": "string" },
+              "exerciseName": { "type": "string" },
+              "sets": { "type": "number" },
+              "reps": { "type": "number" },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "exercises", "createdAt", "updatedAt"]
+    },
+    "HealthProfile": {
+      "title": "HealthProfile",
+      "description": "User's health metrics like height, weight, BMI",
+      "type": "object",
+      "properties": {
+        "height": { "type": "number" },
+        "weight": { "type": "number" },
+        "age": { "type": "number" },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "bmi": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["height", "weight", "age", "gender", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/exercises/{exerciseId}": {
+      "schema": "Exercise",
+      "description": "Reference exercise catalog"
+    },
+    "/workouts/{workoutId}": {
+      "schema": "Workout",
+      "description": "User workout sessions"
+    },
+    "/workouts/{workoutId}/logs/{logId}": {
+      "schema": "ExerciseLog",
+      "description": "Detailed logs for each exercise in a workout"
+    },
+    "/workout_templates/{templateId}": {
+      "schema": "WorkoutTemplate",
+      "description": "User saved patterns/templates"
+    },
+    "/health_profiles/{userId}": {
+      "schema": "HealthProfile",
+      "description": "User health profiles"
+    }
+  }
+}
