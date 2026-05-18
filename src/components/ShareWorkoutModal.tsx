@@ -17,6 +17,61 @@ import {
 import html2canvas from 'html2canvas';
 import { Workout, ExerciseLog } from '../types';
 import { auth } from '../lib/firebase';
+// Helper function to dynamically parse and convert oklch(...) colors to standard, widely supported rgb/rgba colors.
+// This preserves 100% of Tailwind v4 theme colors and gradients in the html2canvas exported image.
+function parseOklch(oklchStr: string): string {
+  const match = oklchStr.match(/oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.%]+))?\s*\)/i);
+  if (!match) return 'rgb(0,0,0)';
+
+  const L = parseFloat(match[1]);
+  const C = parseFloat(match[2]);
+  const H = parseFloat(match[3]);
+  let A = 1;
+
+  if (match[4]) {
+    const alphaStr = match[4].trim();
+    if (alphaStr.endsWith('%')) {
+      A = parseFloat(alphaStr) / 100;
+    } else {
+      A = parseFloat(alphaStr);
+    }
+  }
+
+  // 1. Convert OKLCH to OKLAB
+  const hRad = (H * Math.PI) / 180;
+  const l_ = L;
+  const a_ = C * Math.cos(hRad);
+  const b_ = C * Math.sin(hRad);
+
+  // 2. Convert OKLAB to LMS
+  const l1 = l_ + 0.3963377774 * a_ + 0.2158037573 * b_;
+  const m1 = l_ - 0.1055613458 * a_ - 0.0638541728 * b_;
+  const s1 = l_ - 0.0894841775 * a_ - 1.2914855480 * b_;
+
+  // 3. Cube LMS
+  const l2 = Math.pow(l1, 3);
+  const m2 = Math.pow(m1, 3);
+  const s2 = Math.pow(s1, 3);
+
+  // 4. Convert LMS to linear sRGB
+  const rL = +4.0767416621 * l2 - 3.3077115913 * m2 + 0.2309699292 * s2;
+  const gL = -1.2684380046 * l2 + 2.6097574011 * m2 - 0.3413193965 * s2;
+  const bL = -0.0041960863 * l2 - 0.7034186145 * m2 + 1.7076147010 * s2;
+
+  // Helper to convert linear color component to standard sRGB
+  const toSRGB = (c: number) => {
+    const clamped = Math.max(0, Math.min(1, c));
+    return clamped <= 0.0031308
+      ? 12.92 * clamped
+      : 1.055 * Math.pow(clamped, 1 / 2.4) - 0.055;
+  };
+
+  const r = Math.round(toSRGB(rL) * 255);
+  const g = Math.round(toSRGB(gL) * 255);
+  const b = Math.round(toSRGB(bL) * 255);
+
+  return A === 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${A})`;
+}
 
 interface ShareWorkoutModalProps {
   isOpen: boolean;
@@ -187,7 +242,9 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
           for (let i = 0; i < styleTags.length; i++) {
             const style = styleTags[i];
             if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('oklab'))) {
-              style.textContent = style.textContent.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(0,0,0)');
+              style.textContent = style.textContent.replace(/(oklch|oklab)\([^)]+\)/gi, (match) => {
+                return parseOklch(match);
+              });
             }
           }
           
@@ -200,7 +257,9 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                 const prop = el.style[j];
                 const val = el.style.getPropertyValue(prop);
                 if (val && (val.includes('oklch') || val.includes('oklab'))) {
-                  el.style.setProperty(prop, val.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(0,0,0)'));
+                  el.style.setProperty(prop, val.replace(/(oklch|oklab)\([^)]+\)/gi, (match) => {
+                    return parseOklch(match);
+                  }));
                 }
               }
             }
