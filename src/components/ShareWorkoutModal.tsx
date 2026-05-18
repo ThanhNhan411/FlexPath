@@ -180,6 +180,32 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
         backgroundColor: null,
         scale: 2, // 2x is plenty crisp and consumes far less memory on mobile browsers
         logging: false,
+        onclone: (clonedDoc) => {
+          // Fix for Tailwind v4 color variables: replace oklch/oklab values with standard rgb colors
+          // in cloned style tags to prevent html2canvas's parser from crashing.
+          const styleTags = clonedDoc.getElementsByTagName('style');
+          for (let i = 0; i < styleTags.length; i++) {
+            const style = styleTags[i];
+            if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('oklab'))) {
+              style.textContent = style.textContent.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(0,0,0)');
+            }
+          }
+          
+          // Also clean any raw oklch/oklab colors in inline styles to be fully bulletproof
+          const allElements = clonedDoc.getElementsByTagName('*');
+          for (let i = 0; i < allElements.length; i++) {
+            const el = allElements[i] as HTMLElement;
+            if (el.style) {
+              for (let j = 0; j < el.style.length; j++) {
+                const prop = el.style[j];
+                const val = el.style.getPropertyValue(prop);
+                if (val && (val.includes('oklch') || val.includes('oklab'))) {
+                  el.style.setProperty(prop, val.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(0,0,0)'));
+                }
+              }
+            }
+          }
+        }
       });
       
       const dataUrl = canvas.toDataURL('image/png');
