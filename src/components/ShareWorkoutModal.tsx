@@ -14,7 +14,7 @@ import {
   Loader2,
   Check
 } from 'lucide-react';
-import { toPng } from 'html-to-image';
+import { toBlob } from 'html-to-image';
 import { Workout, ExerciseLog } from '../types';
 import { auth } from '../lib/firebase';
 
@@ -136,19 +136,27 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
     
     try {
       // Small timeout to allow DOM to settle and images to be fully loaded
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 800));
       
-      const dataUrl = await toPng(cardRef.current, {
+      const blob = await toBlob(cardRef.current, {
         quality: 0.95,
         pixelRatio: 2, // High resolution (double crisp)
-        cacheBust: true,
+        cacheBust: false, // Turn off cacheBust to prevent base64 url corruption
       });
       
+      if (!blob) throw new Error('Failed to generate image blob');
+      
+      const dataUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const sanitizedName = workout.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
       link.download = `flexpath_${sanitizedName}_${activeRatio.id.replace(':', '_')}_${new Date().toISOString().slice(0,10)}.png`;
       link.href = dataUrl;
       link.click();
+      
+      // Clean up local blob url memory
+      setTimeout(() => {
+        URL.revokeObjectURL(dataUrl);
+      }, 1000);
     } catch (error) {
       console.error('Failed to export image:', error);
       alert('Đã xảy ra lỗi khi tạo ảnh. Vui lòng thử lại!');
@@ -207,22 +215,19 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
           <div className="w-full overflow-x-auto py-2 px-1 flex justify-start md:justify-center items-center scrollbar-none">
             <div 
               ref={cardRef}
-              style={isCustomMode ? undefined : activeTheme.style}
+              style={
+                isCustomMode 
+                  ? { backgroundImage: `url(${customImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } 
+                  : activeTheme.style
+              }
               className={`${activeRatio.className} rounded-2xl p-6 flex flex-col justify-between shadow-2xl shrink-0 relative overflow-hidden select-none`}
             >
-              {/* Custom image background */}
+              {/* Custom image overlay */}
               {isCustomMode && (
-                <>
-                  <img 
-                    src={customImage || ''} 
-                    alt="Workout background" 
-                    className="absolute inset-0 w-full h-full object-cover z-0" 
-                  />
-                  <div 
-                    className="absolute inset-0 bg-black z-0 transition-opacity" 
-                    style={{ opacity: overlayOpacity / 100 }}
-                  />
-                </>
+                <div 
+                  className="absolute inset-0 bg-zinc-950 z-0 transition-opacity" 
+                  style={{ opacity: overlayOpacity / 100 }}
+                />
               )}
 
               {/* Neon blur decorations for Midnight Theme */}
