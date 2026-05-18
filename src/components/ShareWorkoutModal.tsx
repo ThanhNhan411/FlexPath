@@ -117,13 +117,48 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
     return `${mins}m`;
   };
 
-  // Image Upload handler
+  // Image Upload handler with Compression
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setCustomImage(reader.result as string);
+      reader.onloadend = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          // Create an offscreen canvas to compress the image
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1080;
+          const MAX_HEIGHT = 1920;
+          let width = img.width;
+          let height = img.height;
+
+          // Resize while maintaining aspect ratio
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Export as compressed JPEG to avoid Safari base64 size limits
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            setCustomImage(compressedDataUrl);
+          } else {
+            setCustomImage(event.target?.result as string);
+          }
+        };
+        img.src = event.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -215,19 +250,22 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
           <div className="w-full overflow-x-auto py-2 px-1 flex justify-start md:justify-center items-center scrollbar-none">
             <div 
               ref={cardRef}
-              style={
-                isCustomMode 
-                  ? { backgroundImage: `url(${customImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } 
-                  : activeTheme.style
-              }
-              className={`${activeRatio.className} rounded-2xl p-6 flex flex-col justify-between shadow-2xl shrink-0 relative overflow-hidden select-none`}
+              style={isCustomMode ? undefined : activeTheme.style}
+              className={`${activeRatio.className} rounded-2xl p-6 flex flex-col justify-between shadow-2xl shrink-0 relative overflow-hidden select-none bg-zinc-950`}
             >
-              {/* Custom image overlay */}
+              {/* Custom image background rendering */}
               {isCustomMode && (
-                <div 
-                  className="absolute inset-0 bg-zinc-950 z-0 transition-opacity" 
-                  style={{ opacity: overlayOpacity / 100 }}
-                />
+                <>
+                  <img 
+                    src={customImage || ''} 
+                    alt="Workout custom background" 
+                    className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" 
+                  />
+                  <div 
+                    className="absolute inset-0 bg-black z-0 transition-opacity pointer-events-none" 
+                    style={{ opacity: overlayOpacity / 100 }}
+                  />
+                </>
               )}
 
               {/* Neon blur decorations for Midnight Theme */}
