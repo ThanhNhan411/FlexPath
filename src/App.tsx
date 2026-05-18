@@ -59,7 +59,13 @@ export default function App() {
     return null;
   });
 
+  const [isInAppWebView, setIsInAppWebView] = useState(false);
+
   useEffect(() => {
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    const isInApp = /FBAN|FBAV|Instagram|Zalo|Messenger/i.test(userAgent);
+    setIsInAppWebView(isInApp);
+
     // Process Firebase Redirect Sign-in result on page load (essential for mobile/Safari)
     getRedirectResult(auth)
       .then((result) => {
@@ -103,6 +109,12 @@ export default function App() {
         >
           <Dumbbell className="w-12 h-12 text-accent" />
         </motion.div>
+        {loading && (
+          <p className="mt-4 text-xs font-mono uppercase tracking-widest text-brand/40 flex items-center gap-2">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Đang đồng bộ phiên bảo mật...
+          </p>
+        )}
         {fetchingExercises && user && (
           <p className="mt-4 text-xs font-mono uppercase tracking-widest text-brand/40 flex items-center gap-2">
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -133,6 +145,20 @@ export default function App() {
             <UserIcon className="w-5 h-5" />
             Continue with Google
           </button>
+
+          {isInAppWebView && (
+            <div className="mt-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-left space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                ⚠️ PHÁT HIỆN TRÌNH DUYỆT NHÚNG
+              </p>
+              <p className="text-[11px] leading-relaxed text-white/70">
+                Google chặn đăng nhập bảo mật bên trong ứng dụng nhúng (Zalo, Messenger, Facebook).
+              </p>
+              <p className="text-[11px] font-bold text-amber-400">
+                👉 Vui lòng nhấn nút 3 chấm (...) ở góc phải màn hình và chọn "Mở bằng trình duyệt" (Safari/Chrome) để tiếp tục!
+              </p>
+            </div>
+          )}
         </motion.div>
       </div>
     );
