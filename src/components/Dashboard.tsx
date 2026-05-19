@@ -2,18 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, TrendingUp, Calendar, Trophy, ArrowRight, Activity, Clock, Dumbbell, Trash2, ChevronLeft, Flame } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, where, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Workout, ExerciseLog } from '../types';
 import { cn } from '../lib/utils';
 
 interface DashboardProps {
   onStartWorkout: () => void;
   onViewAllHistory: () => void;
+  onViewAchievements: () => void;
 }
 
-export default function Dashboard({ onStartWorkout, onViewAllHistory }: DashboardProps) {
+export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchievements }: DashboardProps) {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unlockedCount, setUnlockedCount] = useState<number | null>(null);
   const [selectedWorkout, setSelectedWorkout] = useState<{ workout: Workout, logs: ExerciseLog[] } | null>(null);
   const user = auth.currentUser;
 
@@ -30,7 +32,7 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory }: Dashboar
   }, [workouts]);
 
   useEffect(() => {
-    async function loadWorkouts() {
+    async function loadData() {
       if (!user) return;
       try {
         const q = query(
@@ -40,13 +42,26 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory }: Dashboar
         );
         const snapshot = await getDocs(q);
         setWorkouts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Workout[]);
+
+        // Fetch health profile achievements
+        const pSnap = await getDoc(doc(db, 'health_profiles', user.uid));
+        if (pSnap.exists()) {
+          const profile = pSnap.data();
+          if (profile.unlockedAchievements) {
+            setUnlockedCount(profile.unlockedAchievements.length);
+          } else {
+            setUnlockedCount(0);
+          }
+        } else {
+          setUnlockedCount(0);
+        }
       } catch (e) {
         console.error(e);
       } finally {
         setLoading(false);
       }
     }
-    loadWorkouts();
+    loadData();
   }, [user]);
 
   async function viewDetail(workout: Workout) {
@@ -474,6 +489,38 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory }: Dashboar
                 ))
               )}
             </div>
+          </div>
+
+          {/* Achievements Link Card */}
+          <div className="mt-6 border-t border-white/5 pt-6">
+            <button 
+              onClick={onViewAchievements}
+              className="w-full text-left bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-5 rounded-2xl border border-amber-500/25 relative overflow-hidden group hover:scale-[1.02] transition-all hover:border-amber-500/40"
+            >
+              <div className="absolute -top-10 -right-10 w-24 h-24 bg-amber-500/15 rounded-full blur-xl group-hover:scale-135 transition-transform duration-500" />
+              <div className="flex items-center justify-between mb-3 relative z-10">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-amber-500/15 rounded-lg text-amber-400 group-hover:scale-110 transition-transform">
+                    <Trophy className="w-5 h-5 fill-amber-500/20" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white group-hover:text-amber-400 transition-colors">Thành Tích & Huy Hiệu</p>
+                    <p className="text-[9px] font-mono uppercase tracking-widest text-brand/40">Achievements & Badges</p>
+                  </div>
+                </div>
+                {unlockedCount !== null && (
+                  <span className="text-xs font-mono font-bold bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/20">
+                    {unlockedCount}/10
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-brand/60 leading-relaxed relative z-10 mb-2">
+                Chinh phục các thử thách tập luyện và tích lũy các chỉ số để mở khóa 10 danh hiệu Cyberpunk cực đỉnh.
+              </p>
+              <div className="flex items-center gap-1 text-[10px] font-mono text-amber-400 group-hover:underline relative z-10">
+                Xem bảng thành tích <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </button>
           </div>
           
           <div className="mt-6">

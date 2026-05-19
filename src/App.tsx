@@ -199,7 +199,6 @@ export default function App() {
         </button>
 
         <div className="flex items-center gap-1">
-          <NavButton active={activeTab === 'achievements'} onClick={() => setActiveTab('achievements')} icon={Trophy} />
           <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={HistoryIcon} />
           <NavButton active={activeTab === 'health'} onClick={() => setActiveTab('health')} icon={Heart} />
           <button onClick={handleLogout} className="p-2 transition-all">
@@ -247,14 +246,18 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-grow p-4 md:p-8 pb-32 md:pb-8 overflow-y-auto max-w-6xl mx-auto w-full">
         <AnimatePresence mode="wait">
-          {activeTab === 'dashboard' && <Dashboard onStartWorkout={() => {
-            if (isWorkoutActive) {
-               setIsWorkoutMinimized(false);
-            } else {
-               setActiveTemplate(null);
-               setIsWorkoutActive(true);
-            }
-          }} onViewAllHistory={() => setActiveTab('history')} />}
+          {activeTab === 'dashboard' && <Dashboard 
+            onStartWorkout={() => {
+              if (isWorkoutActive) {
+                 setIsWorkoutMinimized(false);
+              } else {
+                 setActiveTemplate(null);
+                 setIsWorkoutActive(true);
+              }
+            }} 
+            onViewAllHistory={() => setActiveTab('history')} 
+            onViewAchievements={() => setActiveTab('achievements')}
+          />}
           {activeTab === 'routines' && (
             <WorkoutTemplates 
               exercises={exercises} 
