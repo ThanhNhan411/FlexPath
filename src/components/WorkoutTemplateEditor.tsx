@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, X, Save, Trash2, Search, ChevronRight, GripVertical, Dumbbell, Filter, Info, Play, Lightbulb } from 'lucide-react';
 import { Exercise, WorkoutTemplate, TemplateExercise } from '../types';
@@ -62,6 +62,54 @@ export default function WorkoutTemplateEditor({
     updatedList.splice(targetIndex, 0, removed);
     setTemplateExercises(updatedList);
 
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  // Touch drag states for mobile support
+  const touchStartY = useRef<number | null>(null);
+  const touchStartIndex = useRef<number | null>(null);
+  const currentTouchIndex = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    touchStartIndex.current = index;
+    touchStartY.current = e.touches[0].clientY;
+    setDraggedIndex(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartIndex.current === null) return;
+    
+    const touch = e.touches[0];
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!element) return;
+
+    const card = element.closest('[data-index]');
+    if (card) {
+      const targetIndex = parseInt(card.getAttribute('data-index') || '', 10);
+      if (!isNaN(targetIndex) && targetIndex !== touchStartIndex.current) {
+        setDragOverIndex(targetIndex);
+        currentTouchIndex.current = targetIndex;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartIndex.current !== null && currentTouchIndex.current !== null) {
+      const sourceIdx = touchStartIndex.current;
+      const targetIdx = currentTouchIndex.current;
+      
+      if (sourceIdx !== targetIdx) {
+        const updatedList = [...templateExercises];
+        const [removed] = updatedList.splice(sourceIdx, 1);
+        updatedList.splice(targetIdx, 0, removed);
+        setTemplateExercises(updatedList);
+      }
+    }
+    
+    touchStartIndex.current = null;
+    currentTouchIndex.current = null;
+    touchStartY.current = null;
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
@@ -243,6 +291,7 @@ export default function WorkoutTemplateEditor({
                   return (
                     <div 
                       key={idx} 
+                      data-index={idx}
                       draggable
                       onDragStart={(e) => handleDragStart(e, idx)}
                       onDragOver={(e) => handleDragOver(e, idx)}
@@ -256,7 +305,12 @@ export default function WorkoutTemplateEditor({
                     >
                       <div className="flex items-start gap-3">
                         {/* Drag Handle */}
-                        <div className="cursor-grab active:cursor-grabbing text-brand/20 group-hover:text-brand/50 transition-colors p-1 self-center shrink-0">
+                        <div 
+                          onTouchStart={(e) => handleTouchStart(e, idx)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
+                          className="cursor-grab active:cursor-grabbing text-brand/20 group-hover:text-brand/50 transition-colors p-1 self-center shrink-0 touch-none"
+                        >
                           <GripVertical className="w-5 h-5" />
                         </div>
                         

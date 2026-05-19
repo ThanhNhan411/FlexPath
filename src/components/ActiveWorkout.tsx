@@ -179,6 +179,64 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
     setDragOverIndex(null);
   };
 
+  // Touch drag states for mobile support
+  const touchStartY = useRef<number | null>(null);
+  const touchStartIndex = useRef<number | null>(null);
+  const currentTouchIndex = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    touchStartIndex.current = index;
+    touchStartY.current = e.touches[0].clientY;
+    setDraggedIndex(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartIndex.current === null) return;
+    
+    const touch = e.touches[0];
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!element) return;
+
+    const card = element.closest('[data-index]');
+    if (card) {
+      const targetIndex = parseInt(card.getAttribute('data-index') || '', 10);
+      if (!isNaN(targetIndex) && targetIndex !== touchStartIndex.current) {
+        setDragOverIndex(targetIndex);
+        currentTouchIndex.current = targetIndex;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartIndex.current !== null && currentTouchIndex.current !== null) {
+      const sourceIdx = touchStartIndex.current;
+      const targetIdx = currentTouchIndex.current;
+      
+      if (sourceIdx !== targetIdx) {
+        // Smart index tracking for active log during drag reordering
+        const activeLogId = activeLogIndex !== -1 && logs[activeLogIndex] ? logs[activeLogIndex].id : null;
+
+        const updatedLogs = [...logs];
+        const [removed] = updatedLogs.splice(sourceIdx, 1);
+        updatedLogs.splice(targetIdx, 0, removed);
+        setLogs(updatedLogs);
+
+        if (activeLogId) {
+          const newActiveIdx = updatedLogs.findIndex(l => l.id === activeLogId);
+          if (newActiveIdx !== -1) {
+            setActiveLogIndex(newActiveIdx);
+          }
+        }
+      }
+    }
+    
+    touchStartIndex.current = null;
+    currentTouchIndex.current = null;
+    touchStartY.current = null;
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   // Find detailed exercise object for animation illustration
   const activeExerciseObj = useMemo(() => {
     if (activeLogIndex === -1 || !logs[activeLogIndex]) return null;
@@ -766,6 +824,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
         {logs.map((log, idx) => (
           <div 
             key={log.id} 
+            data-index={idx}
             draggable
             onDragStart={(e) => handleDragStart(e, idx)}
             onDragOver={(e) => handleDragOver(e, idx)}
@@ -778,7 +837,12 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
             )}
           >
             <div className="p-4 flex items-center justify-between border-b border-white/5">
-              <div className="flex items-center gap-3 cursor-grab active:cursor-grabbing group">
+              <div 
+                onTouchStart={(e) => handleTouchStart(e, idx)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className="flex items-center gap-3 cursor-grab active:cursor-grabbing group touch-none"
+              >
                 <GripVertical className="w-5 h-5 text-brand/20 group-hover:text-brand/50 transition-colors shrink-0" />
                 <Dumbbell className="w-5 h-5 text-accent" />
                 <h4 className="font-bold text-lg">{log.exerciseName}</h4>
