@@ -13,7 +13,8 @@ import {
   ChevronDown,
   Search,
   Filter,
-  Info
+  Info,
+  GripVertical
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
 import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
@@ -134,6 +135,56 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
   const [autopilotPaused, setAutopilotPaused] = useState(false);
   const [autopilotSpeed, setAutopilotSpeed] = useState(2.5); // seconds per rep
   const [hasAnnouncedRestWarn, setHasAnnouncedRestWarn] = useState(false);
+
+  // Drag and Drop States for logs reordering
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    setDragOverIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+    // Smart index tracking for active log during drag reordering
+    const activeLogId = activeLogIndex !== -1 && logs[activeLogIndex] ? logs[activeLogIndex].id : null;
+
+    const updatedLogs = [...logs];
+    const [removed] = updatedLogs.splice(draggedIndex, 1);
+    updatedLogs.splice(targetIndex, 0, removed);
+    setLogs(updatedLogs);
+
+    if (activeLogId) {
+      const newActiveIdx = updatedLogs.findIndex(l => l.id === activeLogId);
+      if (newActiveIdx !== -1) {
+        setActiveLogIndex(newActiveIdx);
+      }
+    }
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  // Find detailed exercise object for animation illustration
+  const activeExerciseObj = useMemo(() => {
+    if (activeLogIndex === -1 || !logs[activeLogIndex]) return null;
+    const currentLog = logs[activeLogIndex];
+    return exercises.find(e => e.id === currentLog.exerciseId || e.name.toLowerCase() === currentLog.exerciseName.toLowerCase()) || null;
+  }, [activeLogIndex, logs, exercises]);
 
   // Find next incomplete set
   const findNextIncompleteSet = (currentLogs = logs) => {
@@ -611,10 +662,11 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                <div className="space-y-1">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                {/* Active Exercise info details */}
+                <div className="space-y-2">
                   <p className="text-[10px] font-mono uppercase text-brand/40 tracking-wider">Bài tập hiện tại</p>
-                  <h5 className="font-bold text-lg text-white">
+                  <h5 className="font-bold text-lg text-white tracking-tight leading-snug">
                     {logs[activeLogIndex]?.exerciseName || '---'}
                   </h5>
                   <p className="text-xs text-brand/60 font-mono">
@@ -622,6 +674,27 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                   </p>
                 </div>
 
+                {/* Animated Exercise illustration */}
+                <div className="relative aspect-video md:aspect-[4/3] w-full rounded-2xl overflow-hidden border border-amber-500/20 bg-black/40 flex items-center justify-center shadow-lg shadow-amber-500/5 group isolate min-h-[110px]">
+                  {activeExerciseObj ? (
+                    <ExerciseAnimation 
+                      exercise={activeExerciseObj}
+                      className="w-full h-full object-contain relative z-10 p-2"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-brand/20">
+                      <Dumbbell className="w-8 h-8 mb-1 opacity-20" />
+                      <span className="text-[9px] uppercase font-mono tracking-widest text-brand/40">Không có ảnh</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none z-20" />
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 backdrop-blur px-2 py-0.5 rounded-full z-30 border border-white/5">
+                    <div className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-[8px] font-bold uppercase font-mono tracking-widest text-white/70">MINH HỌA</span>
+                  </div>
+                </div>
+
+                {/* Counting state / timer / preparing */}
                 <div className="bg-white/5 rounded-xl p-3.5 flex flex-col justify-center items-center text-center relative border border-white/5 min-h-[110px]">
                   {autopilotStatus === 'preparing' && (
                     <div className="space-y-1">
@@ -690,10 +763,23 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
           )}
         </div>
 
-        {logs.map((log) => (
-          <div key={log.id} className="glass-panel overflow-hidden">
+        {logs.map((log, idx) => (
+          <div 
+            key={log.id} 
+            draggable
+            onDragStart={(e) => handleDragStart(e, idx)}
+            onDragOver={(e) => handleDragOver(e, idx)}
+            onDrop={(e) => handleDrop(e, idx)}
+            onDragEnd={handleDragEnd}
+            className={cn(
+              "glass-panel overflow-hidden transition-all duration-200 border border-transparent",
+              draggedIndex === idx && "opacity-30 border-dashed border-white/20 scale-[0.98]",
+              dragOverIndex === idx && "border-accent/40 bg-accent/5 -translate-y-1 shadow-lg shadow-accent/10"
+            )}
+          >
             <div className="p-4 flex items-center justify-between border-b border-white/5">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 cursor-grab active:cursor-grabbing group">
+                <GripVertical className="w-5 h-5 text-brand/20 group-hover:text-brand/50 transition-colors shrink-0" />
                 <Dumbbell className="w-5 h-5 text-accent" />
                 <h4 className="font-bold text-lg">{log.exerciseName}</h4>
               </div>

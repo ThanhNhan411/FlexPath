@@ -33,6 +33,39 @@ export default function WorkoutTemplateEditor({
   const [saving, setSaving] = useState(false);
   const [displayLimit, setDisplayLimit] = useState(24);
 
+  // Drag and Drop State for exercise reordering
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    setDragOverIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === targetIndex) return;
+
+    const updatedList = [...templateExercises];
+    const [removed] = updatedList.splice(draggedIndex, 1);
+    updatedList.splice(targetIndex, 0, removed);
+    setTemplateExercises(updatedList);
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   const filterOptions = useMemo(() => {
     if (!exercises) return { muscles: [], equipments: [], levels: [] };
     return {
@@ -208,8 +241,25 @@ export default function WorkoutTemplateEditor({
                 templateExercises.map((te, idx) => {
                   const exercise = exercises.find(e => e.id === te.exerciseId);
                   return (
-                    <div key={idx} className="glass-panel p-4 group relative">
-                      <div className="flex items-start gap-4">
+                    <div 
+                      key={idx} 
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      className={cn(
+                        "glass-panel p-4 group relative transition-all duration-200 border border-transparent",
+                        draggedIndex === idx && "opacity-30 border-dashed border-white/20 scale-[0.98]",
+                        dragOverIndex === idx && "border-accent/40 bg-accent/5 -translate-y-1 shadow-lg shadow-accent/10"
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Drag Handle */}
+                        <div className="cursor-grab active:cursor-grabbing text-brand/20 group-hover:text-brand/50 transition-colors p-1 self-center shrink-0">
+                          <GripVertical className="w-5 h-5" />
+                        </div>
+                        
                         <div 
                           className="bg-white/5 w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer hover:bg-white/10 transition-colors"
                           onClick={() => exercise && setPreviewExercise(exercise)}
@@ -228,34 +278,34 @@ export default function WorkoutTemplateEditor({
                             <Info className="w-3 h-3 opacity-0 group-hover:opacity-40 transition-opacity" />
                           </h4>
                           <div className="flex items-center gap-6 mt-3">
-                          <div className="space-y-1">
-                            <span className="text-[10px] opacity-40 uppercase">Số hiệp</span>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => updateExercise(idx, { sets: Math.max(1, te.sets - 1) })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">-</button>
-                              <span className="text-sm font-mono w-4 text-center">{te.sets}</span>
-                              <button onClick={() => updateExercise(idx, { sets: te.sets + 1 })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">+</button>
+                            <div className="space-y-1">
+                              <span className="text-[10px] opacity-40 uppercase">Số hiệp</span>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => updateExercise(idx, { sets: Math.max(1, te.sets - 1) })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">-</button>
+                                <span className="text-sm font-mono w-4 text-center">{te.sets}</span>
+                                <button onClick={() => updateExercise(idx, { sets: te.sets + 1 })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">+</button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[10px] opacity-40 uppercase">Số reps</span>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => updateExercise(idx, { reps: Math.max(1, te.reps - 1) })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">-</button>
-                              <span className="text-sm font-mono w-4 text-center">{te.reps}</span>
-                              <button onClick={() => updateExercise(idx, { reps: te.reps + 1 })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">+</button>
+                            <div className="space-y-1">
+                              <span className="text-[10px] opacity-40 uppercase">Số reps</span>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => updateExercise(idx, { reps: Math.max(1, te.reps - 1) })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">-</button>
+                                <span className="text-sm font-mono w-4 text-center">{te.reps}</span>
+                                <button onClick={() => updateExercise(idx, { reps: te.reps + 1 })} className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center text-xs">+</button>
+                              </div>
                             </div>
                           </div>
                         </div>
+                        <button 
+                          onClick={() => removeExercise(idx)}
+                          className="p-2 text-brand/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all self-center"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button 
-                        onClick={() => removeExercise(idx)}
-                        className="p-2 text-brand/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })
               )}
             </div>
           </div>

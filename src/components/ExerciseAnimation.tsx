@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Exercise } from '../types';
 import { Dumbbell } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
 
 interface ExerciseAnimationProps {
   exercise: Exercise;
@@ -58,26 +57,16 @@ export function ExerciseAnimation({ exercise, className }: ExerciseAnimationProp
   // Animation using multiple images
   if (images.length > 0) {
     return (
-      <div className="relative w-full h-full min-h-[inherit] overflow-hidden flex items-center justify-center">
-        <AnimatePresence mode="wait">
-          <motion.img
-            key={`${exercise.id}-${currentImageIndex}`}
-            src={images[currentImageIndex]}
-            alt={`${exercise.name} - Step ${currentImageIndex + 1}`}
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 1 }}
-            transition={{ duration: 0.2 }}
-            referrerPolicy="no-referrer"
-            className={cn(className, "w-full h-full")}
-            style={{ objectFit: 'contain' }}
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.src = `https://placehold.co/600x400/18181b/6366f1?text=${encodeURIComponent(exercise.name)}`;
-            }}
-          />
-        </AnimatePresence>
-      </div>
+      <img
+        src={images[currentImageIndex]}
+        alt={`${exercise.name} - Step ${currentImageIndex + 1}`}
+        referrerPolicy="no-referrer"
+        className={cn(className, "w-full h-full object-contain")}
+        onError={(e) => {
+          const target = e.target as HTMLImageElement;
+          target.src = `https://placehold.co/600x400/18181b/6366f1?text=${encodeURIComponent(exercise.name)}`;
+        }}
+      />
     );
   }
 
