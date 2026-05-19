@@ -62,6 +62,11 @@ export interface Workout {
   calories?: number;
 }
 
+export interface UnlockedBadge {
+  badgeId: string;
+  unlockedAt: string;
+}
+
 export interface HealthProfile {
   height: number;
   weight: number;
@@ -69,4 +74,5 @@ export interface HealthProfile {
   gender: string;
   bmi: number;
   updatedAt: string;
+  unlockedAchievements?: UnlockedBadge[];
 }

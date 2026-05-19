@@ -21,7 +21,8 @@ import {
   User as UserIcon,
   Loader2,
   Heart,
-  Play
+  Play,
+  Trophy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -31,10 +32,11 @@ import WorkoutHistory from './components/WorkoutHistory';
 import ActiveWorkout from './components/ActiveWorkout';
 import WorkoutTemplates from './components/WorkoutTemplates';
 import HealthProfile from './components/HealthProfile';
+import Achievements from './components/Achievements';
 import { fetchExercises } from './services/exerciseService';
 import { Exercise, WorkoutTemplate } from './types';
 
-type Tab = 'dashboard' | 'exercises' | 'routines' | 'history' | 'health';
+type Tab = 'dashboard' | 'exercises' | 'routines' | 'history' | 'health' | 'achievements';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -197,6 +199,7 @@ export default function App() {
         </button>
 
         <div className="flex items-center gap-1">
+          <NavButton active={activeTab === 'achievements'} onClick={() => setActiveTab('achievements')} icon={Trophy} />
           <NavButton active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={HistoryIcon} />
           <NavButton active={activeTab === 'health'} onClick={() => setActiveTab('health')} icon={Heart} />
           <button onClick={handleLogout} className="p-2 transition-all">
@@ -217,6 +220,7 @@ export default function App() {
         <nav className="space-y-2 flex-grow">
           <SidebarLink active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} icon={LayoutDashboard} label="Bàn làm việc" />
           <SidebarLink active={activeTab === 'health'} onClick={() => setActiveTab('health')} icon={Heart} label="Sức khỏe" />
+          <SidebarLink active={activeTab === 'achievements'} onClick={() => setActiveTab('achievements')} icon={Trophy} label="Thành tích" />
           <SidebarLink active={activeTab === 'routines'} onClick={() => setActiveTab('routines')} icon={Settings} label="Giáo án của tôi" />
           <SidebarLink active={activeTab === 'exercises'} onClick={() => setActiveTab('exercises')} icon={Dumbbell} label="Thư viện bài tập" />
           <SidebarLink active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={HistoryIcon} label="Lịch sử tập" />
@@ -268,6 +272,7 @@ export default function App() {
           {activeTab === 'exercises' && <ExerciseLibrary exercises={exercises} />}
           {activeTab === 'history' && <WorkoutHistory />}
           {activeTab === 'health' && <HealthProfile />}
+          {activeTab === 'achievements' && <Achievements />}
         </AnimatePresence>
       </main>
 

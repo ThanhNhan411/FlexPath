@@ -14,13 +14,20 @@ import {
   Search,
   Filter,
   Info,
-  GripVertical
+  GripVertical,
+  Trophy,
+  Sparkles,
+  Share2,
+  Award,
+  CheckCircle2,
+  Lock
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
-import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, getDoc, doc, query, where, getDocs, setDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
-import { ExerciseLog, Exercise, WorkoutTemplate } from '../types';
+import { ExerciseLog, Exercise, WorkoutTemplate, Workout } from '../types';
 import { ExerciseAnimation } from './ExerciseAnimation';
+import { BADGES, Badge } from './Achievements';
 
 const getMETValue = (category?: string): number => {
   if (!category) return 4.5;
@@ -112,6 +119,8 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
   }, [restDuration]);
 
   const [isFinishing, setIsFinishing] = useState(false);
+  const [unlockedBadgesToCelebrated, setUnlockedBadgesToCelebrated] = useState<any[]>([]);
+  const [currentCelebrationIndex, setCurrentCelebrationIndex] = useState(0);
 
   // Voice Text-to-Speech Engine (Web Speech API)
   const speak = (text: string) => {
@@ -578,6 +587,196 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
         await addDoc(collection(db, `workouts/${workoutRef.id}/logs`), logWithCal);
       }
       removeWorkoutState();
+
+      // --- ACHIEVEMENT CHECK ENGINE ---
+      let newlyUnlocked: { badgeId: string, unlockedAt: string }[] = [];
+      try {
+        const healthProfileRef = doc(db, 'health_profiles', auth.currentUser.uid);
+        const healthProfileSnap = await getDoc(healthProfileRef);
+        let existingUnlocked: { badgeId: string, unlockedAt: string }[] = [];
+        let profileData = {};
+        
+        if (healthProfileSnap.exists()) {
+          profileData = healthProfileSnap.data();
+          existingUnlocked = (profileData as any).unlockedAchievements || [];
+        }
+        
+        const existingIds = new Set(existingUnlocked.map(b => b.badgeId));
+        
+        // Fetch all historical workouts (including the one just completed)
+        const qWorkouts = query(
+          collection(db, 'workouts'),
+          where('userId', '==', auth.currentUser.uid)
+        );
+        const workoutsSnap = await getDocs(qWorkouts);
+        const pastWorkouts = workoutsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Workout[];
+        
+        // Add the current workout because it might not be indexed in the query yet
+        let allCompleted = pastWorkouts.filter(w => w.status === 'completed' && w.id !== workoutRef.id);
+        
+        const currentWorkoutData: Workout = {
+          id: workoutRef.id,
+          userId: auth.currentUser.uid,
+          name: `Buổi tập ${new Date().toLocaleDateString('vi-VN')}`,
+          startTime,
+          endTime: new Date().toISOString(),
+          duration: sessionTime,
+          status: 'completed',
+          calories: totalCalories,
+          totalVolume: logs.reduce((acc, log) => acc + log.sets.reduce((sAcc, s) => sAcc + (s.completed ? s.reps * s.weight : 0), 0), 0)
+        };
+        allCompleted.push(currentWorkoutData);
+
+        // 1. Total workouts completed
+        const workoutsCount = allCompleted.length;
+
+        // 2. Cumulative volume
+        const totalVolume = allCompleted.reduce((acc, w) => acc + (w.totalVolume || 0), 0);
+
+        // 3. Max single calories and cumulative calories
+        const maxSingleCalorie = allCompleted.reduce((acc, w) => {
+          const cal = w.calories !== undefined && w.calories !== null ? w.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((w.duration || 0) / 60));
+          return Math.max(acc, cal);
+        }, 0);
+        const totalCaloriesAccumulated = allCompleted.reduce((acc, w) => {
+          const cal = w.calories !== undefined && w.calories !== null ? w.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((w.duration || 0) / 60));
+          return acc + cal;
+        }, 0);
+
+        // 4. Max single duration and cumulative duration
+        const parseDuration = (w: Workout) => {
+          if (w.duration) return Math.floor(w.duration / 60);
+          if (w.endTime) {
+            return Math.floor((new Date(w.endTime).getTime() - new Date(w.startTime).getTime()) / 60000);
+          }
+          return 0;
+        };
+        const maxSingleDuration = allCompleted.reduce((acc, w) => Math.max(acc, parseDuration(w)), 0);
+        const totalDurationMinutes = allCompleted.reduce((acc, w) => acc + parseDuration(w), 0);
+
+        // 5. Streak calculation
+        const workoutDates = allCompleted.map(w => {
+          const d = new Date(w.startTime);
+          return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        }).sort((a, b) => b - a); // descending
+        const uniqueDates = Array.from(new Set(workoutDates));
+        
+        let currentStreak = 0;
+        const today = new Date();
+        const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        let hasToday = uniqueDates.includes(todayMidnight);
+        let hasYesterday = uniqueDates.includes(todayMidnight - oneDayMs);
+        if (hasToday || hasYesterday) {
+          let checkDate = hasToday ? todayMidnight : todayMidnight - oneDayMs;
+          currentStreak = 1;
+          while (uniqueDates.includes(checkDate - oneDayMs)) {
+            currentStreak++;
+            checkDate -= oneDayMs;
+          }
+        }
+
+        // 6. Weekly consecutive workouts (>= 3/week for N weeks)
+        const getISOWeek = (dateStr: string) => {
+          const d = new Date(dateStr);
+          d.setHours(0, 0, 0, 0);
+          d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+          const yearStart = new Date(d.getFullYear(), 0, 1);
+          const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+          return `${d.getFullYear()}-W${weekNo}`;
+        };
+        const weekCounts: { [key: string]: number } = {};
+        allCompleted.forEach(w => {
+          const wk = getISOWeek(w.startTime);
+          weekCounts[wk] = (weekCounts[wk] || 0) + 1;
+        });
+        const sortedWeeks = Object.keys(weekCounts).sort();
+        let maxConsecutiveWeeks = 0;
+        let tempConsecutiveWeeks = 0;
+        const areWeeksSequential = (w1: string, w2: string) => {
+          const parseWeek = (wStr: string) => {
+            const parts = wStr.split('-W');
+            return { yr: parseInt(parts[0]), wk: parseInt(parts[1]) };
+          };
+          const p1 = parseWeek(w1);
+          const p2 = parseWeek(w2);
+          if (p1.yr === p2.yr) return p2.wk === p1.wk + 1;
+          if (p2.yr === p1.yr + 1) return p1.wk >= 52 && p2.wk === 1;
+          return false;
+        };
+        for (let i = 0; i < sortedWeeks.length; i++) {
+          if (weekCounts[sortedWeeks[i]] >= 3) {
+            if (tempConsecutiveWeeks === 0) {
+              tempConsecutiveWeeks = 1;
+            } else if (areWeeksSequential(sortedWeeks[i - 1], sortedWeeks[i])) {
+              tempConsecutiveWeeks++;
+            } else {
+              maxConsecutiveWeeks = Math.max(maxConsecutiveWeeks, tempConsecutiveWeeks);
+              tempConsecutiveWeeks = 1;
+            }
+          } else {
+            maxConsecutiveWeeks = Math.max(maxConsecutiveWeeks, tempConsecutiveWeeks);
+            tempConsecutiveWeeks = 0;
+          }
+        }
+        maxConsecutiveWeeks = Math.max(maxConsecutiveWeeks, tempConsecutiveWeeks);
+
+        // Check each badge criteria
+        BADGES.forEach(badge => {
+          if (existingIds.has(badge.id)) return; // already unlocked
+          
+          let currentVal = 0;
+          switch (badge.targetField) {
+            case 'workouts':
+              currentVal = workoutsCount;
+              break;
+            case 'volume':
+              currentVal = totalVolume;
+              break;
+            case 'calories':
+              currentVal = badge.id === 'nuclear_reactor' ? totalCaloriesAccumulated : maxSingleCalorie;
+              break;
+            case 'streak':
+              currentVal = currentStreak;
+              break;
+            case 'duration':
+              currentVal = badge.id === 'titanium_will' ? totalDurationMinutes : maxSingleDuration;
+              break;
+            case 'weekly':
+              currentVal = maxConsecutiveWeeks;
+              break;
+          }
+
+          if (currentVal >= badge.targetValue) {
+            newlyUnlocked.push({
+              badgeId: badge.id,
+              unlockedAt: new Date().toISOString()
+            });
+          }
+        });
+
+        if (newlyUnlocked.length > 0) {
+          const updatedAchievements = [...existingUnlocked, ...newlyUnlocked];
+          await setDoc(healthProfileRef, {
+            ...profileData,
+            unlockedAchievements: updatedAchievements,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+
+          const fullBadgeObjects = newlyUnlocked.map(item => {
+            const staticBadge = BADGES.find(b => b.id === item.badgeId);
+            return staticBadge ? { ...staticBadge, unlockedAt: item.unlockedAt } : null;
+          }).filter(Boolean);
+
+          setUnlockedBadgesToCelebrated(fullBadgeObjects);
+          setCurrentCelebrationIndex(0);
+          speak(`Chúc mừng bạn đã mở khóa thành tích mới!`);
+          return; // Wait for user to close celebration screen
+        }
+      } catch (err) {
+        console.error("Error checking achievements:", err);
+      }
+
       onComplete();
     } catch (e) {
       console.error(e);
@@ -1295,6 +1494,135 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {unlockedBadgesToCelebrated.length > 0 && (() => {
+          const currentBadge = unlockedBadgesToCelebrated[currentCelebrationIndex];
+          if (!currentBadge) return null;
+          const Icon = currentBadge.icon;
+          const handleNext = () => {
+            if (currentCelebrationIndex < unlockedBadgesToCelebrated.length - 1) {
+              setCurrentCelebrationIndex(prev => prev + 1);
+              speak(`Chúc mừng bạn đã đạt huy hiệu tiếp theo: ${unlockedBadgesToCelebrated[currentCelebrationIndex + 1].title}`);
+            } else {
+              setUnlockedBadgesToCelebrated([]);
+              onComplete();
+            }
+          };
+
+          return (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+              {/* Dark Glass Backdrop with heavy blur */}
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-ink/95 backdrop-blur-2xl"
+              />
+
+              {/* Glowing decorative background elements */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-accent/10 blur-[120px] animate-pulse" />
+                <div 
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] rounded-full blur-[80px]"
+                  style={{ backgroundColor: currentBadge.glowColor }}
+                />
+              </div>
+
+              {/* Cyberpunk Holographic Badge Container */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                transition={{ type: 'spring', damping: 15 }}
+                className="relative w-full max-w-md glass-panel p-8 text-center border border-white/10 bg-gradient-to-b from-white/5 to-black/90 shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden"
+              >
+                {/* Neon Top Border Accent */}
+                <div className={cn("absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r", currentBadge.gradientClass)} />
+
+                <div className="space-y-6">
+                  {/* Holographic Header */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-center gap-2 text-accent">
+                      <Sparkles className="w-5 h-5 animate-pulse" />
+                      <span className="text-xs font-mono uppercase tracking-[0.3em] font-bold">MỞ KHÓA THÀNH TÍCH</span>
+                      <Sparkles className="w-5 h-5 animate-pulse" />
+                    </div>
+                    {unlockedBadgesToCelebrated.length > 1 && (
+                      <p className="text-[10px] font-mono uppercase text-white/40 tracking-wider">
+                        Huy hiệu {currentCelebrationIndex + 1} / {unlockedBadgesToCelebrated.length}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Gigantic Glowing Icon Circle */}
+                  <div className="relative flex items-center justify-center py-6">
+                    {/* Rotating outer frame */}
+                    <div className="absolute w-36 h-36 rounded-full border border-dashed border-white/20 animate-[spin_40s_linear_infinite]" />
+                    <div className="absolute w-32 h-32 rounded-full border border-white/5 animate-[spin_20s_linear_infinite_reverse]" />
+                    
+                    <div 
+                      className={cn(
+                        "w-28 h-28 rounded-3xl flex items-center justify-center relative shrink-0 z-10 transition-all bg-gradient-to-br text-white shadow-2xl"
+                        , currentBadge.gradientClass
+                      )}
+                      style={{
+                        boxShadow: `0 0 40px ${currentBadge.glowColor}`
+                      }}
+                    >
+                      <Icon className="w-14 h-14" />
+                    </div>
+                  </div>
+
+                  {/* Badge Description */}
+                  <div className="space-y-2">
+                    <h2 className="text-3xl font-extrabold text-white tracking-tight capitalize bg-gradient-to-r from-white via-white/90 to-brand/60 bg-clip-text text-transparent">
+                      {currentBadge.title}
+                    </h2>
+                    <p className="text-sm text-accent/90 font-mono tracking-wider font-bold">
+                      {currentBadge.description}
+                    </p>
+                  </div>
+
+                  {/* Lore Text Container */}
+                  <div className="p-4 rounded-2xl bg-white/5 border border-white/5 relative overflow-hidden">
+                    <div className="absolute -top-10 -left-10 w-20 h-20 bg-accent/5 rounded-full blur-xl" />
+                    <p className="italic text-xs text-brand/60 leading-relaxed font-mono">
+                      "{currentBadge.longDescription}"
+                    </p>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="pt-2">
+                    <button
+                      onClick={handleNext}
+                      className={cn(
+                        "w-full py-4 rounded-xl font-bold uppercase tracking-widest font-mono text-sm shadow-xl transition-all active:scale-[0.98] text-white flex items-center justify-center gap-2"
+                        , currentBadge.gradientClass
+                      )}
+                      style={{
+                        boxShadow: `0 4px 20px -2px ${currentBadge.glowColor}`
+                      }}
+                    >
+                      {currentCelebrationIndex < unlockedBadgesToCelebrated.length - 1 ? (
+                        <>
+                          <span>Huy hiệu tiếp theo</span>
+                          <Trophy className="w-4 h-4" />
+                        </>
+                      ) : (
+                        <>
+                          <span>Hoàn thành</span>
+                          <CheckCircle2 className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
       </>
   );
