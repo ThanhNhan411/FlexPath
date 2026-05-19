@@ -5,6 +5,7 @@ import { auth, db } from '../lib/firebase';
 import { collection, query, where, orderBy, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Workout, ExerciseLog } from '../types';
 import { cn } from '../lib/utils';
+import { BADGES, calculateAchievementStats, isBadgeUnlocked } from '../lib/achievements';
 
 interface DashboardProps {
   onStartWorkout: () => void;
@@ -15,7 +16,7 @@ interface DashboardProps {
 export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchievements }: DashboardProps) {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
-  const [unlockedCount, setUnlockedCount] = useState<number | null>(null);
+  const [unlockedBadges, setUnlockedBadges] = useState<{ badgeId: string, unlockedAt: string }[]>([]);
   const [selectedWorkout, setSelectedWorkout] = useState<{ workout: Workout, logs: ExerciseLog[] } | null>(null);
   const user = auth.currentUser;
 
@@ -30,6 +31,12 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
              d.getFullYear() === today.getFullYear();
     });
   }, [workouts]);
+
+  const unlockedCount = React.useMemo(() => {
+    if (loading) return null;
+    const stats = calculateAchievementStats(workouts);
+    return BADGES.filter(badge => isBadgeUnlocked(badge.id, unlockedBadges, stats)).length;
+  }, [workouts, unlockedBadges, loading]);
 
   useEffect(() => {
     async function loadData() {
@@ -48,12 +55,12 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
         if (pSnap.exists()) {
           const profile = pSnap.data();
           if (profile.unlockedAchievements) {
-            setUnlockedCount(profile.unlockedAchievements.length);
+            setUnlockedBadges(profile.unlockedAchievements);
           } else {
-            setUnlockedCount(0);
+            setUnlockedBadges([]);
           }
         } else {
-          setUnlockedCount(0);
+          setUnlockedBadges([]);
         }
       } catch (e) {
         console.error(e);
@@ -510,12 +517,12 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
                 </div>
                 {unlockedCount !== null && (
                   <span className="text-xs font-mono font-bold bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-md border border-amber-500/20">
-                    {unlockedCount}/10
+                    {unlockedCount}/{BADGES.length}
                   </span>
                 )}
               </div>
               <p className="text-xs text-brand/60 leading-relaxed relative z-10 mb-2">
-                Chinh phục các thử thách tập luyện và tích lũy các chỉ số để mở khóa 10 danh hiệu Cyberpunk cực đỉnh.
+                Chinh phục các thử thách tập luyện và tích lũy các chỉ số để mở khóa {BADGES.length} danh hiệu Cyberpunk cực đỉnh.
               </p>
               <div className="flex items-center gap-1 text-[10px] font-mono text-amber-400 group-hover:underline relative z-10">
                 Xem bảng thành tích <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />

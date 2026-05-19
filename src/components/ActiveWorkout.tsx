@@ -27,7 +27,7 @@ import { collection, addDoc, getDoc, doc, query, where, getDocs, setDoc } from '
 import { cn } from '../lib/utils';
 import { ExerciseLog, Exercise, WorkoutTemplate, Workout } from '../types';
 import { ExerciseAnimation } from './ExerciseAnimation';
-import { BADGES, Badge } from './Achievements';
+import { BADGES, Badge } from '../lib/achievements';
 
 const getMETValue = (category?: string): number => {
   if (!category) return 4.5;
