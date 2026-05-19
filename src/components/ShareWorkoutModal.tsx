@@ -465,7 +465,7 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                       </h3>
                       
                       {/* Stats Grid - Vertical list of stats for landscape */}
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         <div className={`p-2.5 rounded-xl ${panelBg}`}>
                           <p className={`text-[7px] font-mono uppercase tracking-widest leading-none mb-1 ${labelColor}`}>VOLUME</p>
                           <p className={`text-base font-bold font-mono tracking-tighter leading-none ${accentColor}`}>
@@ -482,6 +482,13 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                           <p className={`text-[7px] font-mono uppercase tracking-widest leading-none mb-1 ${labelColor}`}>TOTAL SETS</p>
                           <p className={`text-base font-bold font-mono tracking-tighter leading-none ${textColor}`}>
                             {totalSets} <span className="text-[8px] font-normal opacity-50">SETS</span>
+                          </p>
+                        </div>
+                        <div className={`p-2.5 rounded-xl ${panelBg}`}>
+                          <p className={`text-[7px] font-mono uppercase tracking-widest leading-none mb-1 ${labelColor}`}>CALORIES</p>
+                          <p className={`text-base font-bold font-mono tracking-tighter leading-none text-amber-400 flex items-center gap-1`}>
+                            <Flame className="w-3 h-3" />
+                            {workout.calories !== undefined ? workout.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((workout.duration || 0) / 60))} <span className="text-[8px] font-normal opacity-50">KCAL</span>
                           </p>
                         </div>
                       </div>
@@ -515,7 +522,7 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                       </h3>
                       
                       {/* Stats Grid */}
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div className={`p-3 rounded-xl ${panelBg}`}>
                           <p className={`text-[8px] font-mono uppercase tracking-widest leading-none mb-1 ${labelColor}`}>VOLUME</p>
                           <p className={`text-lg font-bold font-mono tracking-tighter leading-none ${accentColor}`}>
@@ -532,6 +539,13 @@ export default function ShareWorkoutModal({ isOpen, onClose, workout, logs }: Sh
                           <p className={`text-[8px] font-mono uppercase tracking-widest leading-none mb-1 ${labelColor}`}>TOTAL SETS</p>
                           <p className={`text-lg font-bold font-mono tracking-tighter leading-none ${textColor}`}>
                             {totalSets} <span className="text-[9px] font-normal opacity-50">SETS</span>
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-xl ${panelBg}`}>
+                          <p className={`text-[8px] font-mono uppercase tracking-widest leading-none mb-1 ${labelColor}`}>CALORIES</p>
+                          <p className={`text-lg font-bold font-mono tracking-tighter leading-none text-amber-400 flex items-center gap-1`}>
+                            <Flame className="w-3.5 h-3.5" />
+                            {workout.calories !== undefined ? workout.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((workout.duration || 0) / 60))} <span className="text-[9px] font-normal opacity-50">KCAL</span>
                           </p>
                         </div>
                       </div>

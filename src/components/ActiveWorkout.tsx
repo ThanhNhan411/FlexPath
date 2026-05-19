@@ -16,10 +16,22 @@ import {
   Info
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, getDoc, doc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 import { ExerciseLog, Exercise, WorkoutTemplate } from '../types';
 import { ExerciseAnimation } from './ExerciseAnimation';
+
+const getMETValue = (category?: string): number => {
+  if (!category) return 4.5;
+  const cat = category.toLowerCase();
+  if (cat.includes('cardio')) return 8.0;
+  if (cat.includes('plyometrics')) return 7.5;
+  if (cat.includes('strength') || cat.includes('powerlifting')) return 5.0;
+  if (cat.includes('olympic') || cat.includes('strongman')) return 6.0;
+  if (cat.includes('stretching') || cat.includes('yoga')) return 2.3;
+  return 4.5;
+};
+
 
 interface ActiveWorkoutProps {
   onClose: () => void;
@@ -405,6 +417,43 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
     setIsFinishing(true);
 
     try {
+      let userWeight = 70;
+      try {
+        const profileRef = doc(db, 'health_profiles', auth.currentUser.uid);
+        const profileSnap = await getDoc(profileRef);
+        if (profileSnap.exists()) {
+          const profileData = profileSnap.data();
+          if (profileData.weight) {
+            userWeight = profileData.weight;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching user weight for calorie calculation:", e);
+      }
+
+      const totalCompletedSets = logs.reduce((acc, log) => acc + log.sets.filter(s => s.completed).length, 0);
+      
+      let totalCalories = 0;
+      const logsWithCalories = logs.map(log => {
+        const completedSetsInLog = log.sets.filter(s => s.completed).length;
+        if (completedSetsInLog === 0 || totalCompletedSets === 0) {
+          return { ...log, calories: 0, sets: log.sets.filter(s => s.completed) };
+        }
+        
+        const exerciseObj = exercises.find(e => e.id === log.exerciseId);
+        const met = getMETValue(exerciseObj?.category);
+        
+        const exerciseDurationMinutes = (sessionTime / 60) * (completedSetsInLog / totalCompletedSets);
+        const calories = Math.round((met * 3.5 * userWeight / 200) * exerciseDurationMinutes);
+        totalCalories += calories;
+        
+        return {
+          ...log,
+          calories,
+          sets: log.sets.filter(s => s.completed)
+        };
+      });
+
       const workoutRef = await addDoc(collection(db, 'workouts'), {
         userId: auth.currentUser.uid,
         name: `Buổi tập ${new Date().toLocaleDateString('vi-VN')}`,
@@ -412,14 +461,12 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
         endTime: new Date().toISOString(),
         duration: sessionTime,
         status: 'completed',
+        calories: totalCalories,
         totalVolume: logs.reduce((acc, log) => acc + log.sets.reduce((sAcc, s) => sAcc + (s.completed ? s.reps * s.weight : 0), 0), 0)
       });
 
-      for (const log of logs) {
-        await addDoc(collection(db, `workouts/${workoutRef.id}/logs`), {
-          ...log,
-          sets: log.sets.filter(s => s.completed)
-        });
+      for (const logWithCal of logsWithCalories) {
+        await addDoc(collection(db, `workouts/${workoutRef.id}/logs`), logWithCal);
       }
       removeWorkoutState();
       onComplete();

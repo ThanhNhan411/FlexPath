@@ -484,6 +484,10 @@ export default function WorkoutHistory() {
                                <Weight className="w-3.5 h-3.5" />
                                {(workout.totalVolume || 0).toLocaleString()} KG
                              </div>
+                             <div className="flex items-center gap-1 text-[10px] uppercase font-mono text-amber-500/80">
+                               <Flame className="w-3.5 h-3.5" />
+                               {workout.calories !== undefined ? workout.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((workout.duration || 0) / 60))} kcal
+                             </div>
                           </div>
                         </div>
                       </div>
@@ -548,6 +552,10 @@ export default function WorkoutHistory() {
                            <Clock className="w-3 h-3" />
                            {formatDuration(workout.startTime, workout.endTime, workout.duration)}
                          </div>
+                         <div className="flex items-center gap-1 text-[10px] uppercase font-mono text-amber-500/80">
+                           <Flame className="w-3 h-3" />
+                           {workout.calories !== undefined ? workout.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((workout.duration || 0) / 60))} kcal
+                         </div>
                       </div>
                     </div>
                   </div>
@@ -599,14 +607,21 @@ export default function WorkoutHistory() {
              </header>
 
              <div className="flex-grow overflow-y-auto p-6 pt-[calc(6.5rem+env(safe-area-inset-top))] space-y-8 pb-32">
-                <div className="grid grid-cols-2 gap-4">
-                   <div className="glass-panel p-6 text-center">
+                <div className="grid grid-cols-3 gap-4">
+                   <div className="glass-panel p-4 text-center">
                       <p className="text-[10px] uppercase font-mono tracking-widest text-brand/40 mb-2">Tổng khối lượng</p>
-                      <p className="text-3xl font-bold font-mono tracking-tighter text-accent">{(selectedWorkout.workout.totalVolume || 0).toLocaleString()} <span className="text-xs font-normal opacity-30">KG</span></p>
+                      <p className="text-xl sm:text-2xl font-bold font-mono tracking-tighter text-accent">{(selectedWorkout.workout.totalVolume || 0).toLocaleString()} <span className="text-xs font-normal opacity-30">KG</span></p>
                    </div>
-                   <div className="glass-panel p-6 text-center">
+                   <div className="glass-panel p-4 text-center">
                       <p className="text-[10px] uppercase font-mono tracking-widest text-brand/40 mb-2">Thời gian tập</p>
-                      <p className="text-3xl font-bold font-mono tracking-tighter">{formatDuration(selectedWorkout.workout.startTime, selectedWorkout.workout.endTime, selectedWorkout.workout.duration)}</p>
+                      <p className="text-xl sm:text-2xl font-bold font-mono tracking-tighter">{formatDuration(selectedWorkout.workout.startTime, selectedWorkout.workout.endTime, selectedWorkout.workout.duration)}</p>
+                   </div>
+                   <div className="glass-panel p-4 text-center border-amber-500/20 bg-amber-500/[0.02]">
+                      <p className="text-[10px] uppercase font-mono tracking-widest text-amber-500/80 mb-2">Calo</p>
+                      <p className="text-xl sm:text-2xl font-bold font-mono tracking-tighter text-amber-400 flex items-center justify-center gap-1">
+                        <Flame className="w-4 h-4 fill-amber-500/20 text-amber-500 shrink-0" />
+                        {selectedWorkout.workout.calories !== undefined ? selectedWorkout.workout.calories : Math.round((5.0 * 3.5 * 70 / 200) * ((selectedWorkout.workout.duration || 0) / 60))} <span className="text-[10px] font-normal opacity-40">kcal</span>
+                      </p>
                    </div>
                 </div>
 
@@ -617,7 +632,15 @@ export default function WorkoutHistory() {
                    <div className="space-y-4">
                       {selectedWorkout.logs.map((log) => (
                         <div key={log.id} className="glass-panel p-4 overflow-hidden">
-                           <h5 className="font-bold text-accent mb-4 border-b border-white/5 pb-2">{log.exerciseName}</h5>
+                           <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-4">
+                              <h5 className="font-bold text-accent">{log.exerciseName}</h5>
+                              {log.calories !== undefined && (
+                                <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1">
+                                  <Flame className="w-3 h-3 fill-amber-500/20" />
+                                  {log.calories} kcal
+                                </span>
+                              )}
+                            </div>
                            <div className="space-y-2">
                               {log.sets.map((set, idx) => (
                                 <div key={idx} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">

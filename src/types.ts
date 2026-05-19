@@ -28,6 +28,7 @@ export interface ExerciseLog {
   exerciseName: string;
   order: number;
   sets: SetLog[];
+  calories?: number;
 }
 
 export interface TemplateExercise {
@@ -58,6 +59,7 @@ export interface Workout {
   status: "active" | "completed" | "cancelled";
   totalVolume?: number;
   duration?: number;
+  calories?: number;
 }
 
 export interface HealthProfile {
