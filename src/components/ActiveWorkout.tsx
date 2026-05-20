@@ -1559,19 +1559,26 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                   {/* Gigantic Glowing Icon Circle */}
                   <div className="relative flex items-center justify-center py-6">
                     {/* Rotating outer frame */}
-                    <div className="absolute w-36 h-36 rounded-full border border-dashed border-white/20 animate-[spin_40s_linear_infinite]" />
-                    <div className="absolute w-32 h-32 rounded-full border border-white/5 animate-[spin_20s_linear_infinite_reverse]" />
+                    <div className="absolute w-72 h-72 rounded-full border border-dashed border-white/20 animate-[spin_40s_linear_infinite]" />
+                    <div className="absolute w-64 h-64 rounded-full border border-white/5 animate-[spin_20s_linear_infinite_reverse]" />
                     
                     <div 
                       className={cn(
-                        "w-28 h-28 rounded-3xl flex items-center justify-center relative shrink-0 z-10 transition-all bg-gradient-to-br text-white shadow-2xl"
-                        , currentBadge.gradientClass
+                        "w-56 h-56 flex items-center justify-center relative shrink-0 z-10 transition-all text-white shadow-2xl",
+                        currentBadge.imageUrl 
+                          ? "rounded-full" 
+                          : cn("rounded-[3rem] bg-gradient-to-br", currentBadge.gradientClass)
                       )}
                       style={{
-                        boxShadow: `0 0 40px ${currentBadge.glowColor}`
+                        boxShadow: !currentBadge.imageUrl ? `0 0 40px ${currentBadge.glowColor}` : 'none',
+                        filter: currentBadge.imageUrl ? `drop-shadow(0 0 16px ${currentBadge.glowColor})` : 'none'
                       }}
                     >
-                      <Icon className="w-14 h-14" />
+                      {currentBadge.imageUrl ? (
+                        <img src={currentBadge.imageUrl} alt={currentBadge.title} className="w-full h-full object-cover rounded-full" />
+                      ) : (
+                        Icon && <Icon className="w-28 h-28" />
+                      )}
                     </div>
                   </div>
 

@@ -20,7 +20,8 @@ export interface Badge {
   title: string;
   description: string;
   longDescription: string;
-  icon: React.ElementType;
+  icon?: React.ElementType;
+  imageUrl?: string;
   gradientClass: string;
   glowColor: string;
   category: 'basic' | 'legend';
@@ -36,7 +37,7 @@ export const BADGES: Badge[] = [
     title: 'Tân Binh Cyber',
     description: 'Hoàn thành 1 buổi tập đầu tiên.',
     longDescription: 'Chào mừng bạn bước chân vào mạng lưới hiệu năng. Đây là viên gạch đầu tiên đặt nền móng cho cơ thể cấp độ Cyborg của bạn.',
-    icon: Activity,
+    imageUrl: '/badges/cyber_rookie.png',
     gradientClass: 'from-cyan-400 via-blue-500 to-indigo-600',
     glowColor: 'rgba(34, 211, 238, 0.4)',
     category: 'basic',
@@ -49,7 +50,7 @@ export const BADGES: Badge[] = [
     title: 'Chiến Binh Bền Bỉ',
     description: 'Hoàn thành 10 buổi tập luyện.',
     longDescription: 'Khả năng vận hành liên tục không lỗi. Hệ tim mạch và cơ bắp đã bắt đầu thích nghi với cường độ lập trình nặng.',
-    icon: Shield,
+    imageUrl: '/badges/endurance_warrior.png',
     gradientClass: 'from-emerald-400 via-teal-500 to-cyan-600',
     glowColor: 'rgba(52, 211, 153, 0.4)',
     category: 'basic',
@@ -62,7 +63,7 @@ export const BADGES: Badge[] = [
     title: 'Chúa Tể Calo',
     description: 'Đốt cháy trên 500 kcal trong một buổi tập.',
     longDescription: 'Lò phản ứng nhiệt lượng quá tải. Bạn đã giải phóng một nguồn năng lượng khổng lồ vượt qua ngưỡng giới hạn thông thường.',
-    icon: Flame,
+    imageUrl: '/badges/flame_overlord.png',
     gradientClass: 'from-amber-400 via-orange-500 to-red-600',
     glowColor: 'rgba(251, 191, 36, 0.4)',
     category: 'basic',
@@ -75,7 +76,7 @@ export const BADGES: Badge[] = [
     title: 'Động Cơ Vĩnh Cửu',
     description: 'Đạt chuỗi tập luyện liên tục 3 ngày.',
     longDescription: 'Duy trì dòng điện hoạt động liên tiếp. Lặp lại chu kỳ không gián đoạn là chìa khóa mở khóa tiềm năng ẩn sâu.',
-    icon: Zap,
+    imageUrl: '/badges/perpetual_motion.png',
     gradientClass: 'from-yellow-300 via-amber-400 to-orange-500',
     glowColor: 'rgba(253, 224, 71, 0.4)',
     category: 'basic',

@@ -281,17 +281,24 @@ export default function Achievements() {
                 <div className="py-4 flex flex-col items-center gap-3">
                   <div 
                     className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all relative shrink-0",
-                      unlocked ? cn("bg-gradient-to-br text-white", badge.gradientClass) : "bg-white/5 text-white/20"
+                      "w-24 h-24 flex items-center justify-center transition-all relative shrink-0",
+                      badge.imageUrl 
+                        ? "rounded-full" 
+                        : (unlocked ? cn("rounded-2xl bg-gradient-to-br text-white", badge.gradientClass) : "rounded-2xl bg-white/5 text-white/20")
                     )}
                     style={{
-                      boxShadow: unlocked ? `0 0 20px ${badge.glowColor}` : 'none'
+                      boxShadow: unlocked && !badge.imageUrl ? `0 0 20px ${badge.glowColor}` : 'none',
+                      filter: unlocked && badge.imageUrl ? `drop-shadow(0 0 8px ${badge.glowColor})` : 'none'
                     }}
                   >
-                    <Icon className="w-6 h-6" />
+                    {badge.imageUrl ? (
+                      <img src={badge.imageUrl} alt={badge.title} className="w-full h-full object-cover rounded-full" />
+                    ) : (
+                      Icon && <Icon className="w-12 h-12" />
+                    )}
                     {!unlocked && (
-                      <div className="absolute -bottom-1 -right-1 bg-ink/90 p-0.5 rounded-full border border-white/10">
-                        <Lock className="w-2.5 h-2.5 text-white/40" />
+                      <div className="absolute -bottom-1.5 -right-1.5 bg-ink/90 p-1 rounded-full border border-white/10 z-10">
+                        <Lock className="w-5 h-5 text-white/40" />
                       </div>
                     )}
                   </div>
@@ -359,17 +366,24 @@ export default function Achievements() {
                 <div className="py-4 flex flex-col items-center gap-3">
                   <div 
                     className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all relative shrink-0",
-                      unlocked ? cn("bg-gradient-to-br text-white", badge.gradientClass) : "bg-white/5 text-white/20"
+                      "w-24 h-24 flex items-center justify-center transition-all relative shrink-0",
+                      badge.imageUrl 
+                        ? "rounded-full" 
+                        : (unlocked ? cn("rounded-2xl bg-gradient-to-br text-white", badge.gradientClass) : "rounded-2xl bg-white/5 text-white/20")
                     )}
                     style={{
-                      boxShadow: unlocked ? `0 0 20px ${badge.glowColor}` : 'none'
+                      boxShadow: unlocked && !badge.imageUrl ? `0 0 20px ${badge.glowColor}` : 'none',
+                      filter: unlocked && badge.imageUrl ? `drop-shadow(0 0 8px ${badge.glowColor})` : 'none'
                     }}
                   >
-                    <Icon className="w-6 h-6" />
+                    {badge.imageUrl ? (
+                      <img src={badge.imageUrl} alt={badge.title} className="w-full h-full object-cover rounded-full" />
+                    ) : (
+                      Icon && <Icon className="w-12 h-12" />
+                    )}
                     {!unlocked && (
-                      <div className="absolute -bottom-1 -right-1 bg-ink/90 p-0.5 rounded-full border border-white/10">
-                        <Lock className="w-2.5 h-2.5 text-white/40" />
+                      <div className="absolute -bottom-1.5 -right-1.5 bg-ink/90 p-1 rounded-full border border-white/10 z-10">
+                        <Lock className="w-5 h-5 text-white/40" />
                       </div>
                     )}
                   </div>
@@ -463,15 +477,22 @@ export default function Achievements() {
                   {/* Glowing icon */}
                   <div 
                     className={cn(
-                      "w-20 h-20 rounded-2xl flex items-center justify-center relative shrink-0",
-                      unlocked ? cn("bg-gradient-to-br text-white", selectedBadge.gradientClass) : "bg-white/5 text-white/20"
+                      "w-40 h-40 flex items-center justify-center relative shrink-0",
+                      selectedBadge.imageUrl 
+                        ? "rounded-full" 
+                        : (unlocked ? cn("rounded-[2rem] bg-gradient-to-br text-white", selectedBadge.gradientClass) : "rounded-[2rem] bg-white/5 text-white/20")
                     )}
                     style={{
-                      boxShadow: unlocked ? `0 0 30px ${selectedBadge.glowColor}` : 'none'
+                      boxShadow: unlocked && !selectedBadge.imageUrl ? `0 0 30px ${selectedBadge.glowColor}` : 'none',
+                      filter: unlocked && selectedBadge.imageUrl ? `drop-shadow(0 0 12px ${selectedBadge.glowColor})` : 'none'
                     }}
                   >
-                    <Icon className="w-10 h-10" />
-                    {!unlocked && <Lock className="absolute w-5 h-5 text-white/40" />}
+                    {selectedBadge.imageUrl ? (
+                      <img src={selectedBadge.imageUrl} alt={selectedBadge.title} className="w-full h-full object-cover rounded-full" />
+                    ) : (
+                      Icon && <Icon className="w-20 h-20" />
+                    )}
+                    {!unlocked && <Lock className="absolute w-10 h-10 text-white/40 z-10" />}
                   </div>
 
                   <div className="space-y-1">
@@ -586,10 +607,22 @@ export default function Achievements() {
                 <div className="absolute top-0 right-0 w-24 h-24 bg-accent/5 rounded-full blur-xl pointer-events-none" />
                 
                 <div 
-                  className={cn("w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 bg-gradient-to-br", toast.badge.gradientClass)}
-                  style={{ boxShadow: `0 0 10px ${toast.badge.glowColor}` }}
+                  className={cn(
+                    "w-20 h-20 flex items-center justify-center text-white shrink-0",
+                    toast.badge.imageUrl 
+                      ? "rounded-full" 
+                      : cn("rounded-2xl bg-gradient-to-br", toast.badge.gradientClass)
+                  )}
+                  style={{
+                    boxShadow: !toast.badge.imageUrl ? `0 0 10px ${toast.badge.glowColor}` : 'none',
+                    filter: toast.badge.imageUrl ? `drop-shadow(0 0 6px ${toast.badge.glowColor})` : 'none'
+                  }}
                 >
-                  <Icon className="w-5 h-5" />
+                  {toast.badge.imageUrl ? (
+                    <img src={toast.badge.imageUrl} alt={toast.badge.title} className="w-full h-full object-cover rounded-full" />
+                  ) : (
+                    Icon && <Icon className="w-10 h-10" />
+                  )}
                 </div>
                 
                 <div className="flex-1 min-w-0">
