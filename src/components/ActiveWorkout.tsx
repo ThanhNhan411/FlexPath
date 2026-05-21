@@ -1566,7 +1566,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                       className={cn(
                         "w-56 h-56 flex items-center justify-center relative shrink-0 z-10 transition-all text-white shadow-2xl",
                         currentBadge.imageUrl 
-                          ? "rounded-full" 
+                          ? "" 
                           : cn("rounded-[3rem] bg-gradient-to-br", currentBadge.gradientClass)
                       )}
                       style={{
@@ -1575,7 +1575,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                       }}
                     >
                       {currentBadge.imageUrl ? (
-                        <img src={currentBadge.imageUrl} alt={currentBadge.title} className="w-full h-full object-cover rounded-full" />
+                        <img src={currentBadge.imageUrl} alt={currentBadge.title} className="w-full h-full object-contain" />
                       ) : (
                         Icon && <Icon className="w-28 h-28" />
                       )}

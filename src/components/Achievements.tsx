@@ -283,7 +283,7 @@ export default function Achievements() {
                     className={cn(
                       "w-24 h-24 flex items-center justify-center transition-all relative shrink-0",
                       badge.imageUrl 
-                        ? "rounded-full" 
+                        ? "" 
                         : (unlocked ? cn("rounded-2xl bg-gradient-to-br text-white", badge.gradientClass) : "rounded-2xl bg-white/5 text-white/20")
                     )}
                     style={{
@@ -292,7 +292,7 @@ export default function Achievements() {
                     }}
                   >
                     {badge.imageUrl ? (
-                      <img src={badge.imageUrl} alt={badge.title} className="w-full h-full object-cover rounded-full" />
+                      <img src={badge.imageUrl} alt={badge.title} className="w-full h-full object-contain" />
                     ) : (
                       Icon && <Icon className="w-12 h-12" />
                     )}
@@ -368,7 +368,7 @@ export default function Achievements() {
                     className={cn(
                       "w-24 h-24 flex items-center justify-center transition-all relative shrink-0",
                       badge.imageUrl 
-                        ? "rounded-full" 
+                        ? "" 
                         : (unlocked ? cn("rounded-2xl bg-gradient-to-br text-white", badge.gradientClass) : "rounded-2xl bg-white/5 text-white/20")
                     )}
                     style={{
@@ -377,7 +377,7 @@ export default function Achievements() {
                     }}
                   >
                     {badge.imageUrl ? (
-                      <img src={badge.imageUrl} alt={badge.title} className="w-full h-full object-cover rounded-full" />
+                      <img src={badge.imageUrl} alt={badge.title} className="w-full h-full object-contain" />
                     ) : (
                       Icon && <Icon className="w-12 h-12" />
                     )}
@@ -479,7 +479,7 @@ export default function Achievements() {
                     className={cn(
                       "w-40 h-40 flex items-center justify-center relative shrink-0",
                       selectedBadge.imageUrl 
-                        ? "rounded-full" 
+                        ? "" 
                         : (unlocked ? cn("rounded-[2rem] bg-gradient-to-br text-white", selectedBadge.gradientClass) : "rounded-[2rem] bg-white/5 text-white/20")
                     )}
                     style={{
@@ -488,7 +488,7 @@ export default function Achievements() {
                     }}
                   >
                     {selectedBadge.imageUrl ? (
-                      <img src={selectedBadge.imageUrl} alt={selectedBadge.title} className="w-full h-full object-cover rounded-full" />
+                      <img src={selectedBadge.imageUrl} alt={selectedBadge.title} className="w-full h-full object-contain" />
                     ) : (
                       Icon && <Icon className="w-20 h-20" />
                     )}
@@ -610,7 +610,7 @@ export default function Achievements() {
                   className={cn(
                     "w-20 h-20 flex items-center justify-center text-white shrink-0",
                     toast.badge.imageUrl 
-                      ? "rounded-full" 
+                      ? "" 
                       : cn("rounded-2xl bg-gradient-to-br", toast.badge.gradientClass)
                   )}
                   style={{
@@ -619,7 +619,7 @@ export default function Achievements() {
                   }}
                 >
                   {toast.badge.imageUrl ? (
-                    <img src={toast.badge.imageUrl} alt={toast.badge.title} className="w-full h-full object-cover rounded-full" />
+                    <img src={toast.badge.imageUrl} alt={toast.badge.title} className="w-full h-full object-contain" />
                   ) : (
                     Icon && <Icon className="w-10 h-10" />
                   )}
