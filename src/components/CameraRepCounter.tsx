@@ -16,6 +16,11 @@ const SETUP_HINT: Record<CameraExercise, string> = {
   squat: 'Đặt điện thoại hoặc máy tính cách 2–3 mét, đứng quay nghiêng sao cho thấy rõ hông, đầu gối và cổ chân.',
   pushup:
     'Đặt camera ngang tầm sàn, cách 2–3 mét và quay nghiêng người sao cho thấy rõ vai, khuỷu tay, cổ tay và hông. Giữ thân thẳng khi hạ xuống.',
+  lunge: 'Đặt camera cách 2–3 mét, quay nghiêng để thấy cả hai chân. Mỗi lần hạ xuống rồi đứng lên tính là 1 rep (đổi chân tùy ý).',
+  shoulderpress:
+    'Đứng đối diện camera, cách 2–3 mét, thấy rõ vai, khuỷu tay và cổ tay. Bắt đầu với tạ ngang vai, mỗi lần đẩy thẳng tay lên cao tính 1 rep.',
+  curl: 'Đứng đối diện hoặc quay nghiêng, cách 2–3 mét, thấy rõ cả cánh tay. Bắt đầu với tay duỗi, cuộn tạ lên rồi hạ xuống hết tầm.',
+  situp: 'Nằm quay nghiêng người về phía camera, cách 2–3 mét, thấy rõ vai và hông. Ngồi dậy hẳn rồi nằm xuống hoàn toàn để tính 1 rep.',
 };
 
 interface CameraRepCounterProps {
@@ -24,15 +29,36 @@ interface CameraRepCounterProps {
   targetReps: number;
   onFinish: (reps: number) => void;
   onClose: () => void;
+  /** Called every time a rep is counted (with the running total). */
+  onRep?: (reps: number) => void;
+  /** Speak "Hoàn thành set!" when the target is reached. Disable when the caller announces completion itself. */
+  announceFinish?: boolean;
 }
 
 type Stage = 'loading' | 'ready' | 'error';
 
-export default function CameraRepCounter({ kind, exerciseName, targetReps, onFinish, onClose }: CameraRepCounterProps) {
+export default function CameraRepCounter({
+  kind,
+  exerciseName,
+  targetReps,
+  onFinish,
+  onClose,
+  onRep,
+  announceFinish = true,
+}: CameraRepCounterProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const counterRef = useRef(new RepCounter(kind));
   const finishedRef = useRef(false);
+
+  // The detection loop is created once, so callbacks and the target are read through refs
+  // to always see the latest values instead of stale closures.
+  const onFinishRef = useRef(onFinish);
+  const onRepRef = useRef(onRep);
+  const targetRef = useRef(targetReps);
+  onFinishRef.current = onFinish;
+  onRepRef.current = onRep;
+  targetRef.current = targetReps;
 
   const [stage, setStage] = useState<Stage>('loading');
   const [errorMsg, setErrorMsg] = useState('');
@@ -128,11 +154,12 @@ export default function CameraRepCounter({ kind, exerciseName, targetReps, onFin
 
           if (u.repCompleted && !finishedRef.current) {
             setReps(u.reps);
+            onRepRef.current?.(u.reps);
             speak(String(u.reps));
-            if (u.reps >= targetReps) {
+            if (u.reps >= targetRef.current) {
               finishedRef.current = true;
-              speak('Hoàn thành set!');
-              setTimeout(() => !cancelled && onFinish(u.reps), 1200);
+              if (announceFinish) speak('Hoàn thành set!');
+              setTimeout(() => !cancelled && onFinishRef.current(u.reps), 1200);
             }
           }
         };

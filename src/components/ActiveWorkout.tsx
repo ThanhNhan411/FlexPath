@@ -153,6 +153,10 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
   const [autopilotPaused, setAutopilotPaused] = useState(false);
   const [autopilotSpeed, setAutopilotSpeed] = useState(2.5); // seconds per rep
   const [hasAnnouncedRestWarn, setHasAnnouncedRestWarn] = useState(false);
+  const [autopilotCamera, setAutopilotCamera] = useState(() => localStorage.getItem('autopilotCamera') === 'true');
+  useEffect(() => {
+    localStorage.setItem('autopilotCamera', String(autopilotCamera));
+  }, [autopilotCamera]);
 
   // Drag and Drop States for logs reordering
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -343,9 +347,37 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
     return () => clearInterval(interval);
   }, [isAutopilot, autopilotPaused, autopilotStatus, activeLogIndex, activeSetIndex]);
 
+  // When enabled and supported, the camera counts reps instead of the metronome timer.
+  const autopilotCameraKind =
+    isAutopilot && activeLogIndex !== -1 ? getCameraExercise(logs[activeLogIndex]?.exerciseName ?? '') : null;
+  const autopilotCameraActive =
+    autopilotCamera && !!autopilotCameraKind && autopilotStatus === 'counting' && !autopilotPaused;
+
+  // Called when the camera has counted the set (target reached or user ended it early).
+  const finishAutopilotSetFromCamera = (count: number) => {
+    if (activeLogIndex === -1 || activeSetIndex === -1) return;
+    const newLogs = [...logs];
+    const set = newLogs[activeLogIndex]?.sets[activeSetIndex];
+    if (!set || count <= 0) return;
+    set.reps = count;
+    set.completed = true;
+    set.timestamp = new Date().toISOString();
+    setLogs(newLogs);
+    setCurrentRepCount(count);
+
+    speak('Hoàn thành set! Tuyệt vời. Bắt đầu thời gian nghỉ.');
+    if (restDuration > 0) {
+      setRestTimer(restDuration);
+      setAutopilotStatus('resting');
+    } else {
+      goToNextAutopilotSet(newLogs);
+    }
+  };
+
   // Effect to handle rep counting
   useEffect(() => {
     if (!isAutopilot || autopilotPaused || autopilotStatus !== 'counting') return;
+    if (autopilotCameraActive) return; // reps come from the camera
     if (activeLogIndex === -1 || activeSetIndex === -1) return;
 
     const currentLog = logs[activeLogIndex];
@@ -381,7 +413,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
     }, autopilotSpeed * 1000);
 
     return () => clearInterval(interval);
-  }, [isAutopilot, autopilotPaused, autopilotStatus, activeLogIndex, activeSetIndex, autopilotSpeed, restDuration, logs]);
+  }, [isAutopilot, autopilotPaused, autopilotStatus, activeLogIndex, activeSetIndex, autopilotSpeed, restDuration, logs, autopilotCameraActive]);
 
   // Effect to handle rest countdown and next set transition
   useEffect(() => {
@@ -997,7 +1029,9 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                           style={{ width: `${(currentRepCount / (logs[activeLogIndex]?.sets[activeSetIndex]?.reps || 1)) * 100}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-brand/40 font-mono tracking-wide">Nhịp đếm: {autopilotSpeed}s/rep</p>
+                      <p className="text-[10px] text-brand/40 font-mono tracking-wide">
+                        {autopilotCameraActive ? 'Camera đang đếm rep của bạn' : `Nhịp đếm: ${autopilotSpeed}s/rep`}
+                      </p>
                     </div>
                   )}
 
@@ -1017,6 +1051,36 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Camera counting toggle */}
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-brand/50 flex items-center gap-1.5">
+                    <Camera className="w-3 h-3" /> Đếm rep bằng camera
+                  </span>
+                  <p className="text-[10px] text-brand/30 mt-0.5">
+                    {autopilotCameraKind
+                      ? 'Bài này hỗ trợ camera.'
+                      : 'Bài hiện tại chưa hỗ trợ, sẽ dùng nhịp đếm.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setAutopilotCamera(v => !v)}
+                  role="switch"
+                  aria-checked={autopilotCamera}
+                  className={cn(
+                    'relative w-11 h-6 rounded-full transition-colors shrink-0',
+                    autopilotCamera ? 'bg-accent' : 'bg-white/10'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform',
+                      autopilotCamera && 'translate-x-5'
+                    )}
+                  />
+                </button>
               </div>
 
               {/* Adjust counter speed */}
@@ -1510,6 +1574,24 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
             </span>
           </div>
         )}
+
+      <AnimatePresence>
+        {autopilotCameraActive && autopilotCameraKind && logs[activeLogIndex] && (
+          <Suspense fallback={null}>
+            <CameraRepCounter
+              key={`${logs[activeLogIndex].id}-${activeSetIndex}`}
+              kind={autopilotCameraKind}
+              exerciseName={logs[activeLogIndex].exerciseName}
+              targetReps={logs[activeLogIndex].sets[activeSetIndex]?.reps || 10}
+              announceFinish={false}
+              onRep={count => setCurrentRepCount(count)}
+              onFinish={finishAutopilotSetFromCamera}
+              // Closing the camera hands counting back to the metronome timer.
+              onClose={() => setAutopilotCamera(false)}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {cameraTarget && (() => {

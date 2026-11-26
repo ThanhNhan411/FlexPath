@@ -35,6 +35,35 @@ function pushPose(elbowDeg: number, sag = 0, vis = 1): Landmark[] {
   return l;
 }
 
+/** Two legs with independent knee angles; visibility can differ per leg. */
+function legPose(leftDeg: number, rightDeg: number, visL = 1, visR = 1): Landmark[] {
+  const l = blank();
+  const build = (deg: number, vis: number, ids: [number, number, number], dx: number) => {
+    const knee = { x: 0.5 + dx, y: 0.6 };
+    const ankle = { x: 0.5 + dx, y: 0.8 };
+    const t = Math.PI - (deg * Math.PI) / 180;
+    const hip = { x: knee.x + 0.2 * Math.sin(t), y: knee.y - 0.2 * Math.cos(t) };
+    place(l, [ids[0]], hip, vis);
+    place(l, [ids[1]], knee, vis);
+    place(l, [ids[2]], ankle, vis);
+  };
+  build(leftDeg, visL, [LM.LEFT_HIP, LM.LEFT_KNEE, LM.LEFT_ANKLE], -0.05);
+  build(rightDeg, visR, [LM.RIGHT_HIP, LM.RIGHT_KNEE, LM.RIGHT_ANKLE], 0.05);
+  return l;
+}
+
+/** Side view lying down; `value` is 180 - torso elevation (so 175 = flat, 105 = sat up 75 degrees). */
+function situpPose(value: number, vis = 1): Landmark[] {
+  const l = blank();
+  const e = ((180 - value) * Math.PI) / 180;
+  const hip = { x: 0.6, y: 0.7 };
+  const shoulder = { x: hip.x - 0.3 * Math.cos(e), y: hip.y - 0.3 * Math.sin(e) };
+  place(l, [LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER], shoulder, vis);
+  place(l, [LM.LEFT_HIP, LM.RIGHT_HIP], hip, vis);
+  place(l, [LM.LEFT_KNEE, LM.RIGHT_KNEE], { x: 0.75, y: 0.55 }, vis);
+  return l;
+}
+
 // Deterministic pseudo-noise so the tests never flake.
 let seed = 7;
 const noise = () => {
@@ -134,6 +163,93 @@ describe('push-up counting', () => {
   });
 });
 
+describe('lunge counting', () => {
+  it('counts lunges using the more flexed knee', () => {
+    // Front (left) knee follows the movement, back (right) knee is a bit straighter.
+    const pose = (deg: number) => legPose(deg, Math.min(175, deg + 12));
+    expect(simulate(new RepCounter('lunge'), pose, 6, 85).completed).toBe(6);
+  });
+
+  it('still counts when one leg is hidden', () => {
+    const pose = (deg: number) => legPose(deg, deg, 1, 0.1);
+    expect(simulate(new RepCounter('lunge'), pose, 4, 85).completed).toBe(4);
+  });
+
+  it('ignores shallow lunges', () => {
+    const pose = (deg: number) => legPose(deg, deg + 5);
+    const r = simulate(new RepCounter('lunge'), pose, 4, 130);
+    expect(r.completed).toBe(0);
+    expect(r.feedback).toContain('Hạ thấp');
+  });
+});
+
+describe('shoulder press counting', () => {
+  it('counts a rep each time the arms lock out from the rack position', () => {
+    const c = new RepCounter('shoulderpress');
+    let t = 0;
+    let done = 0;
+    const frame = (deg: number) => {
+      if (c.update(pushPose(deg + noise()), 1, (t += 33)).repCompleted) done++;
+    };
+    for (let i = 0; i < 15; i++) frame(85); // rack position
+    for (let r = 0; r < 3; r++) {
+      for (let i = 0; i <= 20; i++) frame(85 + 85 * Math.sin((Math.PI / 2) * (i / 20))); // press up
+      for (let i = 0; i <= 20; i++) frame(170 - 85 * Math.sin((Math.PI / 2) * (i / 20))); // lower back
+    }
+    expect(done).toBe(3);
+  });
+});
+
+describe('curl counting', () => {
+  it('counts full curls', () => {
+    expect(simulate(new RepCounter('curl'), pushPose, 6, 40).completed).toBe(6);
+  });
+
+  it('asks for a higher curl when the range is short', () => {
+    const r = simulate(new RepCounter('curl'), pushPose, 4, 100);
+    expect(r.completed).toBe(0);
+    expect(r.feedback).toContain('cao hơn');
+  });
+});
+
+describe('sit-up counting', () => {
+  it('counts full sit-ups', () => {
+    const c = new RepCounter('situp');
+    let t = 0;
+    let done = 0;
+    const frame = (v: number) => {
+      if (c.update(situpPose(v + noise()), 1, (t += 33)).repCompleted) done++;
+    };
+    for (let i = 0; i < 10; i++) frame(175);
+    for (let r = 0; r < 5; r++) {
+      for (let i = 0; i <= 30; i++) frame(175 - 70 * Math.sin(Math.PI * (i / 30))); // up to 75 deg and back
+    }
+    for (let i = 0; i < 10; i++) frame(175);
+    expect(done).toBe(5);
+  });
+
+  it('does not count a half crunch and asks to sit up higher', () => {
+    const c = new RepCounter('situp');
+    let t = 0;
+    let done = 0;
+    let feedback: string | null = null;
+    for (let r = 0; r < 4; r++) {
+      for (let i = 0; i <= 30; i++) {
+        const u = c.update(situpPose(175 - 35 * Math.sin(Math.PI * (i / 30)) + noise()), 1, (t += 33));
+        if (u.repCompleted) done++;
+        if (u.feedback) feedback = u.feedback;
+      }
+    }
+    for (let i = 0; i < 10; i++) c.update(situpPose(175), 1, (t += 33));
+    expect(done).toBe(0);
+    expect(feedback).toContain('Ngồi dậy');
+  });
+
+  it('reports no pose when the torso is hidden', () => {
+    expect(new RepCounter('situp').update(situpPose(170, 0.1), 1, 0).status).toBe('no-pose');
+  });
+});
+
 describe('getCameraExercise', () => {
   it.each([
     ['Barbell Squat', 'squat'],
@@ -142,6 +258,17 @@ describe('getCameraExercise', () => {
     ['Push-Up Wide', 'pushup'],
     ['Incline Push-Up', 'pushup'],
     ['Push-Ups - Close Triceps Position', 'pushup'],
+    ['Dumbbell Lunges', 'lunge'],
+    ['Barbell Walking Lunge', 'lunge'],
+    ['Dumbbell Rear Lunge', 'lunge'],
+    ['Dumbbell Shoulder Press', 'shoulderpress'],
+    ['Barbell Shoulder Press', 'shoulderpress'],
+    ['Seated Cable Shoulder Press', 'shoulderpress'],
+    ['Barbell Curl', 'curl'],
+    ['Dumbbell Bicep Curl', 'curl'],
+    ['Hammer Curls', 'curl'],
+    ['EZ-Bar Curl', 'curl'],
+    ['Sit-Up', 'situp'],
   ])('%s -> %s', (name, kind) => {
     expect(getCameraExercise(name)).toBe(kind);
   });
@@ -155,6 +282,18 @@ describe('getCameraExercise', () => {
     'Push Press',
     'Push Up to Side Plank',
     'Barbell Bench Press - Medium Grip',
+    'Lunge Sprint',
+    'Kettlebell Turkish Get-Up (Lunge style)',
+    'Arnold Dumbbell Press',
+    'Dumbbell One-Arm Shoulder Press',
+    'Alternating Cable Shoulder Press',
+    'Lying Leg Curls',
+    'Palms-Up Barbell Wrist Curl Over A Bench',
+    'Concentration Curls',
+    'Dumbbell Alternate Bicep Curl',
+    'Jackknife Sit-Up',
+    'Weighted Sit-Ups - With Bands',
+    'Crunches',
   ])('%s is unsupported', name => {
     expect(getCameraExercise(name)).toBeNull();
   });

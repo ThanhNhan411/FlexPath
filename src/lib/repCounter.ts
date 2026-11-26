@@ -64,6 +64,14 @@ export interface RepConfig {
   /** Joint measured to count reps, per body side. */
   left: JointTriple;
   right: JointTriple;
+  /**
+   * 'angle': angle at the middle joint (default).
+   * 'torso-elevation': how far segment a→mid is raised above horizontal, reported as 180° - elevation
+   * so that "lying flat" reads like an extended joint (180°) and "sitting up" like a flexed one.
+   */
+  metric?: 'angle' | 'torso-elevation';
+  /** 'best' follows the more visible side, 'min' follows whichever side is more flexed (e.g. lunges). */
+  sides?: 'best' | 'min';
   /** Angle below which the athlete counts as "down" (joint flexed). */
   downAngle: number;
   /** Angle above which the athlete counts as "up" (joint extended). */
@@ -88,9 +96,18 @@ export interface RepConfig {
   };
 }
 
-export type CameraExercise = 'squat' | 'pushup';
+export type CameraExercise = 'squat' | 'pushup' | 'lunge' | 'shoulderpress' | 'curl' | 'situp';
 
-export const REP_CONFIGS: Record<CameraExercise, RepConfig> = {
+const KNEE = {
+  left: { a: LM.LEFT_HIP, mid: LM.LEFT_KNEE, c: LM.LEFT_ANKLE },
+  right: { a: LM.RIGHT_HIP, mid: LM.RIGHT_KNEE, c: LM.RIGHT_ANKLE },
+};
+const ELBOW = {
+  left: { a: LM.LEFT_SHOULDER, mid: LM.LEFT_ELBOW, c: LM.LEFT_WRIST },
+  right: { a: LM.RIGHT_SHOULDER, mid: LM.RIGHT_ELBOW, c: LM.RIGHT_WRIST },
+};
+
+const BASE_CONFIGS: Record<'squat' | 'pushup', RepConfig> = {
   squat: {
     left: { a: LM.LEFT_HIP, mid: LM.LEFT_KNEE, c: LM.LEFT_ANKLE },
     right: { a: LM.RIGHT_HIP, mid: LM.RIGHT_KNEE, c: LM.RIGHT_ANKLE },
@@ -125,12 +142,93 @@ export const REP_CONFIGS: Record<CameraExercise, RepConfig> = {
   },
 };
 
+const CFG_LUNGE: RepConfig = {
+  ...KNEE,
+  sides: 'min',
+  downAngle: 110,
+  upAngle: 160,
+  partialAngle: 140,
+  minVisibility: 0.5,
+  minRepMs: 800,
+  smoothing: 0.4,
+  depthMessage: 'Hạ thấp hơn, gối trước gập khoảng 90°',
+  noPoseMessage: 'Quay nghiêng và lùi lại để thấy cả hai chân',
+};
+
+const CFG_SHOULDERPRESS: RepConfig = {
+  ...ELBOW,
+  // A rep is counted when the arms lock out overhead after being bent at shoulder level.
+  downAngle: 100,
+  upAngle: 155,
+  partialAngle: 130,
+  minVisibility: 0.5,
+  minRepMs: 700,
+  smoothing: 0.45,
+  depthMessage: 'Hạ tạ thấp hơn, khuỷu gập khoảng 90°',
+  noPoseMessage: 'Đứng đối diện camera, thấy rõ vai, khuỷu tay và cổ tay',
+};
+
+const CFG_CURL: RepConfig = {
+  ...ELBOW,
+  downAngle: 60,
+  upAngle: 150,
+  partialAngle: 110,
+  minVisibility: 0.5,
+  minRepMs: 700,
+  smoothing: 0.45,
+  depthMessage: 'Cuộn tạ cao hơn để tính rep',
+  noPoseMessage: 'Đứng đối diện hoặc quay nghiêng để thấy rõ cánh tay',
+};
+
+const CFG_SITUP: RepConfig = {
+  left: { a: LM.LEFT_SHOULDER, mid: LM.LEFT_HIP, c: LM.LEFT_KNEE },
+  right: { a: LM.RIGHT_SHOULDER, mid: LM.RIGHT_HIP, c: LM.RIGHT_KNEE },
+  metric: 'torso-elevation',
+  // Elevation above ~60° counts as sat up, below ~15° as lying back down.
+  downAngle: 120,
+  upAngle: 165,
+  partialAngle: 150,
+  minVisibility: 0.5,
+  minRepMs: 900,
+  smoothing: 0.4,
+  depthMessage: 'Ngồi dậy cao hơn để tính rep',
+  noPoseMessage: 'Nằm quay nghiêng để camera thấy vai và hông',
+};
+
+export const REP_CONFIGS: Record<CameraExercise, RepConfig> = {
+  ...BASE_CONFIGS,
+  lunge: CFG_LUNGE,
+  shoulderpress: CFG_SHOULDERPRESS,
+  curl: CFG_CURL,
+  situp: CFG_SITUP,
+};
+
 const NAME_RULES: { kind: CameraExercise; include: RegExp; exclude: RegExp }[] = [
   { kind: 'squat', include: /squat/i, exclude: /jump|pistol|split|overhead/i },
   {
     kind: 'pushup',
     include: /push[\s-]?ups?\b/i,
     exclude: /handstand|plyo|single|clock|side plank|depth|archer|suspended|one[\s-]arm/i,
+  },
+  {
+    kind: 'lunge',
+    include: /lunge/i,
+    exclude: /jump|sprint|pass through|crossover|turkish|stretch/i,
+  },
+  {
+    kind: 'shoulderpress',
+    include: /(shoulder|overhead) press/i,
+    exclude: /arnold|behind|push press|one[\s-]arm|single|alternating|kettlebell|seesaw/i,
+  },
+  {
+    kind: 'curl',
+    include: /curls?\b/i,
+    exclude: /leg|wrist|finger|lower back|alternat|one[\s-]arm|single|concentration|ball|nordic|reverse|cross[\s-]?body|zottman/i,
+  },
+  {
+    kind: 'situp',
+    include: /sit[\s-]?ups?\b/i,
+    exclude: /jackknife|janda|frog|press|3\/4|weighted/i,
   },
 ];
 
@@ -184,11 +282,11 @@ export class RepCounter {
 
     if (!landmarks || landmarks.length < 29) return noPose();
 
-    const side = this.pickSide(landmarks);
-    if (!side) return noPose();
-
     const scale = (p: Landmark): Landmark => ({ x: p.x * aspect, y: p.y });
-    const raw = jointAngle(scale(landmarks[side.joint.a]), scale(landmarks[side.joint.mid]), scale(landmarks[side.joint.c]));
+    const measured = this.measure(landmarks, scale);
+    if (!measured) return noPose();
+    const { raw, isLeft } = measured;
+    const side = { isLeft };
 
     this.smoothed = this.smoothed === null ? raw : this.smoothed + this.cfg.smoothing * (raw - this.smoothed);
     const angle = this.smoothed;
@@ -227,12 +325,41 @@ export class RepCounter {
     return { status: 'tracking', angle, phase: this.phase, reps: this.reps, repCompleted, feedback };
   }
 
-  private pickSide(l: Landmark[]) {
-    const vis = (j: JointTriple) => Math.min(l[j.a].visibility ?? 1, l[j.mid].visibility ?? 1, l[j.c].visibility ?? 1);
+  /** Current value of the tracked metric (degrees), or null when no limb is visible enough. */
+  private measure(l: Landmark[], scale: (p: Landmark) => Landmark): { raw: number; isLeft: boolean } | null {
+    const elevation = this.cfg.metric === 'torso-elevation';
+    const vis = (j: JointTriple) =>
+      elevation
+        ? Math.min(l[j.a].visibility ?? 1, l[j.mid].visibility ?? 1)
+        : Math.min(l[j.a].visibility ?? 1, l[j.mid].visibility ?? 1, l[j.c].visibility ?? 1);
+    const value = (j: JointTriple) => {
+      const a = scale(l[j.a]);
+      const mid = scale(l[j.mid]);
+      if (elevation) {
+        // Image y grows downward, so a raised torso has the shoulder (a) above the hip (mid): mid.y > a.y.
+        const rise = Math.max(0, mid.y - a.y);
+        const run = Math.abs(a.x - mid.x);
+        const deg = (Math.atan2(rise, run) * 180) / Math.PI;
+        return 180 - deg;
+      }
+      return jointAngle(a, mid, scale(l[j.c]));
+    };
+
     const lv = vis(this.cfg.left);
     const rv = vis(this.cfg.right);
-    if (Math.max(lv, rv) < this.cfg.minVisibility) return null;
-    return lv >= rv ? { joint: this.cfg.left, isLeft: true } : { joint: this.cfg.right, isLeft: false };
+    const leftOk = lv >= this.cfg.minVisibility;
+    const rightOk = rv >= this.cfg.minVisibility;
+    if (!leftOk && !rightOk) return null;
+
+    if (this.cfg.sides === 'min') {
+      const candidates: { raw: number; isLeft: boolean }[] = [];
+      if (leftOk) candidates.push({ raw: value(this.cfg.left), isLeft: true });
+      if (rightOk) candidates.push({ raw: value(this.cfg.right), isLeft: false });
+      return candidates.reduce((best, c) => (c.raw < best.raw ? c : best));
+    }
+
+    const useLeft = lv >= rv;
+    return { raw: value(useLeft ? this.cfg.left : this.cfg.right), isLeft: useLeft };
   }
 }
 
