@@ -1,10 +1,12 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, Play, BookmarkPlus, Check, Calendar, Lightbulb, Loader2 } from 'lucide-react';
+import { ChevronDown, Play, BookmarkPlus, Check, Calendar, Lightbulb, Loader2, Activity, Sparkles } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 import { Exercise, WorkoutTemplate } from '../types';
 import { saveTemplate } from '../services/workoutTemplateService';
+import { buildBmiPlan, computeBmi, adaptSession, programsForPlan, BmiPlan } from '../lib/bmiPlanner';
 import {
-  PRESET_PROGRAMS,
   PresetProgram,
   PresetSession,
   PresetLevel,
@@ -30,12 +32,40 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
   const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  const [plan, setPlan] = useState<BmiPlan | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [personalize, setPersonalize] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!auth.currentUser) return;
+        const snap = await getDoc(doc(db, 'health_profiles', auth.currentUser.uid));
+        if (!snap.exists() || cancelled) return;
+        const d = snap.data();
+        const bmi = typeof d.bmi === 'number' ? d.bmi : computeBmi(d.height, d.weight);
+        if (bmi && bmi > 5 && bmi < 80) setPlan(buildBmiPlan(bmi));
+      } catch (e) {
+        console.error('Error loading health profile:', e);
+      } finally {
+        if (!cancelled) setProfileLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const activePlan = personalize ? plan : null;
+
   const programs = useMemo(
-    () => PRESET_PROGRAMS.filter(p => level === 'all' || p.level === level),
-    [level]
+    () => programsForPlan(activePlan).filter(p => level === 'all' || p.level === level),
+    [level, activePlan]
   );
 
-  const buildTemplate = (program: PresetProgram, session: PresetSession) => {
+  const buildTemplate = (program: PresetProgram, rawSession: PresetSession) => {
+    const session = activePlan ? adaptSession(rawSession, activePlan.category).session : rawSession;
     const resolved = resolveSession(session, exercises);
     const name = program.sessions.length > 1 ? `${program.name} – ${session.name}` : program.name;
     return { name: name.slice(0, 100), description: `${program.tagline}. ${session.focus}.`.slice(0, 1000), exercises: resolved };
@@ -83,6 +113,8 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
 
   return (
     <div className="space-y-5">
+      <BmiBanner plan={plan} loaded={profileLoaded} personalize={personalize} onToggle={() => setPersonalize(v => !v)} />
+
       <div className="flex flex-wrap gap-2">
         {LEVEL_FILTERS.map(l => (
           <button
@@ -127,6 +159,11 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
                     <Badge>{GOAL_LABEL[program.goal]}</Badge>
                     <Badge>{EQUIPMENT_LABEL[program.equipment]}</Badge>
                     <Badge>{program.daysPerWeek} buổi/tuần</Badge>
+                    {activePlan && activePlan.recommended.includes(program.id) && (
+                      <span className="px-2 py-1 bg-accent/20 text-accent rounded-md text-[10px] font-mono uppercase flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Phù hợp với bạn
+                      </span>
+                    )}
                   </div>
                 </div>
                 <ChevronDown
@@ -153,7 +190,9 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
                       </div>
 
                       <div className="space-y-4">
-                        {program.sessions.map((session, i) => {
+                        {program.sessions.map((rawSession, i) => {
+                          const adapted = activePlan ? adaptSession(rawSession, activePlan.category) : null;
+                          const session = adapted ? adapted.session : rawSession;
                           const key = `${program.id}-${i}`;
                           const saved = savedKeys.has(key);
                           const saving = savingKey === key;
@@ -168,7 +207,7 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
                                 </div>
                                 <div className="flex gap-2">
                                   <button
-                                    onClick={() => handleSave(program, session, i)}
+                                    onClick={() => handleSave(program, rawSession, i)}
                                     disabled={saving || saved}
                                     className={cn(
                                       'flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono uppercase tracking-wider border transition-all',
@@ -187,7 +226,7 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
                                     {saved ? 'Đã lưu' : 'Lưu'}
                                   </button>
                                   <button
-                                    onClick={() => handleStart(program, session, i)}
+                                    onClick={() => handleStart(program, rawSession, i)}
                                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-mono uppercase tracking-wider bg-accent text-white hover:bg-accent/80 transition-all active:scale-95"
                                   >
                                     <Play className="w-3.5 h-3.5 fill-white" />
@@ -195,6 +234,12 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
                                   </button>
                                 </div>
                               </div>
+
+                              {adapted && adapted.changes.length > 0 && (
+                                <p className="text-[11px] text-accent/80 font-mono">
+                                  Đã điều chỉnh theo BMI: {adapted.changes.join('; ')}
+                                </p>
+                              )}
 
                               <ul className="divide-y divide-white/5">
                                 {session.exercises.map((e, j) => (
@@ -236,6 +281,74 @@ export default function PresetRoutines({ exercises, onStartFromTemplate, onSaved
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const CATEGORY_LABEL = {
+  underweight: 'Thiếu cân',
+  normal: 'Bình thường',
+  overweight: 'Thừa cân',
+  obese: 'Béo phì',
+} as const;
+
+interface BmiBannerProps {
+  plan: BmiPlan | null;
+  loaded: boolean;
+  personalize: boolean;
+  onToggle: () => void;
+}
+
+function BmiBanner({ plan, loaded, personalize, onToggle }: BmiBannerProps) {
+  if (!loaded) return null;
+
+  if (!plan) {
+    return (
+      <div className="glass-panel p-5 flex items-start gap-3">
+        <Activity className="w-5 h-5 text-accent shrink-0 mt-0.5" />
+        <div>
+          <p className="font-bold text-sm">Cá nhân hóa theo BMI</p>
+          <p className="text-xs text-brand/50 mt-1">
+            Nhập chiều cao và cân nặng ở mục Sức khỏe để nhận gợi ý giáo án và điều chỉnh bài tập phù hợp với thể trạng của bạn.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-panel p-5 space-y-4 border-accent/30">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <Activity className="w-5 h-5 text-accent shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-brand/40">
+              BMI {plan.bmi.toFixed(1)} • {CATEGORY_LABEL[plan.category]}
+            </p>
+            <p className="font-bold">{plan.title}</p>
+          </div>
+        </div>
+        <button
+          onClick={onToggle}
+          className={cn(
+            'px-3 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-wider border transition-all',
+            personalize ? 'bg-accent border-accent text-white' : 'bg-white/5 border-white/10 text-brand/60'
+          )}
+        >
+          {personalize ? 'Đang cá nhân hóa' : 'Cá nhân hóa: tắt'}
+        </button>
+      </div>
+      <p className="text-sm text-brand/70 leading-relaxed">{plan.summary}</p>
+      {personalize && (
+        <ul className="list-disc pl-5 space-y-1 text-xs text-brand/60">
+          {plan.guidelines.map((g, i) => (
+            <li key={i}>{g}</li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[10px] text-brand/30 font-mono">
+        BMI chỉ là chỉ số tham khảo, không phản ánh tỷ lệ cơ hay mỡ. Hãy tham khảo bác sĩ nếu có bệnh nền.
+      </p>
     </div>
   );
 }
