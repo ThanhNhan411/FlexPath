@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Camera, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
-import { SquatCounter, RepUpdate } from '../lib/repCounter';
+import { RepCounter, RepUpdate, CameraExercise } from '../lib/repCounter';
 import { cn } from '../lib/utils';
 
 // Keep the WASM runtime version in sync with the installed @mediapipe/tasks-vision package.
@@ -12,7 +12,14 @@ const MODEL_URL =
 
 const TARGET_FPS = 20;
 
+const SETUP_HINT: Record<CameraExercise, string> = {
+  squat: 'Đặt điện thoại hoặc máy tính cách 2–3 mét, đứng quay nghiêng sao cho thấy rõ hông, đầu gối và cổ chân.',
+  pushup:
+    'Đặt camera ngang tầm sàn, cách 2–3 mét và quay nghiêng người sao cho thấy rõ vai, khuỷu tay, cổ tay và hông. Giữ thân thẳng khi hạ xuống.',
+};
+
 interface CameraRepCounterProps {
+  kind: CameraExercise;
   exerciseName: string;
   targetReps: number;
   onFinish: (reps: number) => void;
@@ -21,10 +28,10 @@ interface CameraRepCounterProps {
 
 type Stage = 'loading' | 'ready' | 'error';
 
-export default function CameraRepCounter({ exerciseName, targetReps, onFinish, onClose }: CameraRepCounterProps) {
+export default function CameraRepCounter({ kind, exerciseName, targetReps, onFinish, onClose }: CameraRepCounterProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const counterRef = useRef(new SquatCounter());
+  const counterRef = useRef(new RepCounter(kind));
   const finishedRef = useRef(false);
 
   const [stage, setStage] = useState<Stage>('loading');
@@ -242,8 +249,7 @@ export default function CameraRepCounter({ exerciseName, targetReps, onFinish, o
 
         <div className="p-4 space-y-3">
           <p className="text-xs text-brand/50 leading-relaxed">
-            Đặt điện thoại hoặc máy tính cách 2–3 mét, đứng <b>quay nghiêng</b> sao cho thấy rõ hông, đầu gối và cổ chân. Video chỉ được
-            xử lý trên thiết bị của bạn, không được gửi đi.
+            {SETUP_HINT[kind]} Video chỉ được xử lý trên thiết bị của bạn, không được gửi đi.
           </p>
           <div className="flex gap-2">
             <button

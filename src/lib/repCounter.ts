@@ -41,6 +41,10 @@ export function jointAngle(a: Landmark, b: Landmark, c: Landmark): number {
 export const LM = {
   LEFT_SHOULDER: 11,
   RIGHT_SHOULDER: 12,
+  LEFT_ELBOW: 13,
+  RIGHT_ELBOW: 14,
+  LEFT_WRIST: 15,
+  RIGHT_WRIST: 16,
   LEFT_HIP: 23,
   RIGHT_HIP: 24,
   LEFT_KNEE: 25,
@@ -49,12 +53,22 @@ export const LM = {
   RIGHT_ANKLE: 28,
 } as const;
 
-export interface SquatOptions {
-  /** Knee angle below which the athlete counts as "down". */
+/** Landmark indices of the three points forming a joint angle (the angle is measured at `mid`). */
+export interface JointTriple {
+  a: number;
+  mid: number;
+  c: number;
+}
+
+export interface RepConfig {
+  /** Joint measured to count reps, per body side. */
+  left: JointTriple;
+  right: JointTriple;
+  /** Angle below which the athlete counts as "down" (joint flexed). */
   downAngle: number;
-  /** Knee angle above which the athlete counts as standing "up". */
+  /** Angle above which the athlete counts as "up" (joint extended). */
   upAngle: number;
-  /** Below this angle while descending we warn that depth is not enough once they come back up. */
+  /** Going below this and coming back without reaching downAngle gives depth feedback. */
   partialAngle: number;
   /** Minimum landmark visibility to trust a limb. */
   minVisibility: number;
@@ -62,27 +76,83 @@ export interface SquatOptions {
   minRepMs: number;
   /** Exponential smoothing factor (0–1], higher reacts faster. */
   smoothing: number;
+  depthMessage: string;
+  noPoseMessage: string;
+  /** Optional posture check run on every frame; only produces feedback, never blocks counting. */
+  form?: {
+    left: JointTriple;
+    right: JointTriple;
+    /** Feedback is shown while the angle is below this value. */
+    minAngle: number;
+    message: string;
+  };
 }
 
-export const DEFAULT_SQUAT_OPTIONS: SquatOptions = {
-  downAngle: 105,
-  upAngle: 160,
-  partialAngle: 140,
-  minVisibility: 0.5,
-  minRepMs: 600,
-  smoothing: 0.4,
+export type CameraExercise = 'squat' | 'pushup';
+
+export const REP_CONFIGS: Record<CameraExercise, RepConfig> = {
+  squat: {
+    left: { a: LM.LEFT_HIP, mid: LM.LEFT_KNEE, c: LM.LEFT_ANKLE },
+    right: { a: LM.RIGHT_HIP, mid: LM.RIGHT_KNEE, c: LM.RIGHT_ANKLE },
+    downAngle: 105,
+    upAngle: 160,
+    partialAngle: 140,
+    minVisibility: 0.5,
+    minRepMs: 600,
+    smoothing: 0.4,
+    depthMessage: 'Xuống sâu hơn để tính rep',
+    noPoseMessage: 'Đứng lùi lại để camera thấy toàn thân',
+  },
+  pushup: {
+    // Elbow angle: shoulder–elbow–wrist.
+    left: { a: LM.LEFT_SHOULDER, mid: LM.LEFT_ELBOW, c: LM.LEFT_WRIST },
+    right: { a: LM.RIGHT_SHOULDER, mid: LM.RIGHT_ELBOW, c: LM.RIGHT_WRIST },
+    downAngle: 95,
+    upAngle: 155,
+    partialAngle: 130,
+    minVisibility: 0.5,
+    minRepMs: 500,
+    smoothing: 0.45,
+    depthMessage: 'Hạ ngực thấp hơn để tính rep',
+    noPoseMessage: 'Đặt camera ngang tầm sàn, quay nghiêng để thấy cả người',
+    form: {
+      // Body line: shoulder–hip–ankle should stay roughly straight.
+      left: { a: LM.LEFT_SHOULDER, mid: LM.LEFT_HIP, c: LM.LEFT_ANKLE },
+      right: { a: LM.RIGHT_SHOULDER, mid: LM.RIGHT_HIP, c: LM.RIGHT_ANKLE },
+      minAngle: 150,
+      message: 'Giữ thân thẳng, đừng võng hông',
+    },
+  },
 };
 
-export class SquatCounter {
-  private opts: SquatOptions;
+const NAME_RULES: { kind: CameraExercise; include: RegExp; exclude: RegExp }[] = [
+  { kind: 'squat', include: /squat/i, exclude: /jump|pistol|split|overhead/i },
+  {
+    kind: 'pushup',
+    include: /push[\s-]?ups?\b/i,
+    exclude: /handstand|plyo|single|clock|side plank|depth|archer|suspended|one[\s-]arm/i,
+  },
+];
+
+/** Which camera counter (if any) supports this exercise. */
+export function getCameraExercise(name: string): CameraExercise | null {
+  for (const r of NAME_RULES) {
+    if (r.include.test(name) && !r.exclude.test(name)) return r.kind;
+  }
+  return null;
+}
+
+export class RepCounter {
+  private cfg: RepConfig;
   private smoothed: number | null = null;
   private phase: RepPhase = 'up';
   private reps = 0;
   private lastRepAt = -Infinity;
   private wentPartial = false;
 
-  constructor(opts: Partial<SquatOptions> = {}) {
-    this.opts = { ...DEFAULT_SQUAT_OPTIONS, ...opts };
+  constructor(kind: CameraExercise | RepConfig = 'squat', overrides: Partial<RepConfig> = {}) {
+    const base = typeof kind === 'string' ? REP_CONFIGS[kind] : kind;
+    this.cfg = { ...base, ...overrides };
   }
 
   reset() {
@@ -109,7 +179,7 @@ export class SquatCounter {
       phase: this.phase,
       reps: this.reps,
       repCompleted: false,
-      feedback: 'Đứng lùi lại để camera thấy toàn thân',
+      feedback: this.cfg.noPoseMessage,
     });
 
     if (!landmarks || landmarks.length < 29) return noPose();
@@ -118,30 +188,39 @@ export class SquatCounter {
     if (!side) return noPose();
 
     const scale = (p: Landmark): Landmark => ({ x: p.x * aspect, y: p.y });
-    const raw = jointAngle(scale(landmarks[side.hip]), scale(landmarks[side.knee]), scale(landmarks[side.ankle]));
+    const raw = jointAngle(scale(landmarks[side.joint.a]), scale(landmarks[side.joint.mid]), scale(landmarks[side.joint.c]));
 
-    this.smoothed = this.smoothed === null ? raw : this.smoothed + this.opts.smoothing * (raw - this.smoothed);
+    this.smoothed = this.smoothed === null ? raw : this.smoothed + this.cfg.smoothing * (raw - this.smoothed);
     const angle = this.smoothed;
 
     let repCompleted = false;
     let feedback: string | null = null;
 
     if (this.phase === 'up') {
-      if (angle < this.opts.downAngle) {
+      if (angle < this.cfg.downAngle) {
         this.phase = 'down';
         this.wentPartial = false;
-      } else if (angle < this.opts.partialAngle) {
+      } else if (angle < this.cfg.partialAngle) {
         this.wentPartial = true;
-      } else if (angle > this.opts.upAngle && this.wentPartial) {
-        feedback = 'Xuống sâu hơn để tính rep';
+      } else if (angle > this.cfg.upAngle && this.wentPartial) {
+        feedback = this.cfg.depthMessage;
         this.wentPartial = false;
       }
-    } else if (angle > this.opts.upAngle) {
+    } else if (angle > this.cfg.upAngle) {
       this.phase = 'up';
-      if (nowMs - this.lastRepAt >= this.opts.minRepMs) {
+      if (nowMs - this.lastRepAt >= this.cfg.minRepMs) {
         this.reps += 1;
         this.lastRepAt = nowMs;
         repCompleted = true;
+      }
+    }
+
+    if (!feedback && this.cfg.form) {
+      const f = side.isLeft ? this.cfg.form.left : this.cfg.form.right;
+      const vis = Math.min(landmarks[f.a].visibility ?? 1, landmarks[f.mid].visibility ?? 1, landmarks[f.c].visibility ?? 1);
+      if (vis >= this.cfg.minVisibility) {
+        const body = jointAngle(scale(landmarks[f.a]), scale(landmarks[f.mid]), scale(landmarks[f.c]));
+        if (body < this.cfg.form.minAngle) feedback = this.cfg.form.message;
       }
     }
 
@@ -149,12 +228,17 @@ export class SquatCounter {
   }
 
   private pickSide(l: Landmark[]) {
-    const left = { hip: LM.LEFT_HIP, knee: LM.LEFT_KNEE, ankle: LM.LEFT_ANKLE };
-    const right = { hip: LM.RIGHT_HIP, knee: LM.RIGHT_KNEE, ankle: LM.RIGHT_ANKLE };
-    const vis = (s: { hip: number; knee: number; ankle: number }) => Math.min(l[s.hip].visibility ?? 1, l[s.knee].visibility ?? 1, l[s.ankle].visibility ?? 1);
-    const lv = vis(left);
-    const rv = vis(right);
-    const best = lv >= rv ? left : right;
-    return Math.max(lv, rv) >= this.opts.minVisibility ? best : null;
+    const vis = (j: JointTriple) => Math.min(l[j.a].visibility ?? 1, l[j.mid].visibility ?? 1, l[j.c].visibility ?? 1);
+    const lv = vis(this.cfg.left);
+    const rv = vis(this.cfg.right);
+    if (Math.max(lv, rv) < this.cfg.minVisibility) return null;
+    return lv >= rv ? { joint: this.cfg.left, isLeft: true } : { joint: this.cfg.right, isLeft: false };
+  }
+}
+
+/** Backwards-compatible squat counter. */
+export class SquatCounter extends RepCounter {
+  constructor(overrides: Partial<RepConfig> = {}) {
+    super('squat', overrides);
   }
 }

@@ -29,11 +29,11 @@ import { cn } from '../lib/utils';
 import { ExerciseLog, Exercise, WorkoutTemplate, Workout } from '../types';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { BADGES, Badge } from '../lib/achievements';
+import { getCameraExercise } from '../lib/repCounter';
 
 // Loaded on demand: pulls in the pose model runtime only when the camera counter is opened.
 const CameraRepCounter = lazy(() => import('./CameraRepCounter'));
 
-const supportsCameraCounting = (name: string) => /squat/i.test(name) && !/jump|pistol/i.test(name);
 
 const getMETValue = (category?: string): number => {
   if (!category) return 4.5;
@@ -1096,7 +1096,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                       }}
                     />
                     <div className="flex justify-center items-center gap-1.5">
-                      {supportsCameraCounting(log.exerciseName) && !set.completed && (
+                      {getCameraExercise(log.exerciseName) && !set.completed && (
                         <button
                           onClick={() => setCameraTarget({ logId: log.id, setIdx: idx })}
                           title="Đếm rep bằng camera"
@@ -1476,10 +1476,12 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
         {cameraTarget && (() => {
           const camLog = logs.find(l => l.id === cameraTarget.logId);
           const camSet = camLog?.sets[cameraTarget.setIdx];
-          if (!camLog || !camSet) return null;
+          const camKind = camLog ? getCameraExercise(camLog.exerciseName) : null;
+          if (!camLog || !camSet || !camKind) return null;
           return (
             <Suspense fallback={null}>
               <CameraRepCounter
+                kind={camKind}
                 exerciseName={camLog.exerciseName}
                 targetReps={camSet.reps || 10}
                 onClose={() => setCameraTarget(null)}
