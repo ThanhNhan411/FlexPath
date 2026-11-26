@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
@@ -20,7 +20,8 @@ import {
   Share2,
   Award,
   CheckCircle2,
-  Lock
+  Lock,
+  Camera
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
 import { collection, addDoc, getDoc, doc, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -28,6 +29,11 @@ import { cn } from '../lib/utils';
 import { ExerciseLog, Exercise, WorkoutTemplate, Workout } from '../types';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { BADGES, Badge } from '../lib/achievements';
+
+// Loaded on demand: pulls in the pose model runtime only when the camera counter is opened.
+const CameraRepCounter = lazy(() => import('./CameraRepCounter'));
+
+const supportsCameraCounting = (name: string) => /squat/i.test(name) && !/jump|pistol/i.test(name);
 
 const getMETValue = (category?: string): number => {
   if (!category) return 4.5;
@@ -401,6 +407,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
   const [displayLimit, setDisplayLimit] = useState(24);
   const [showPickerFilters, setShowPickerFilters] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cameraTarget, setCameraTarget] = useState<{ logId: string; setIdx: number } | null>(null);
 
   const filterOptions = useMemo(() => {
     if (!exercises) return { muscles: [], equipments: [], levels: [] };
@@ -1088,7 +1095,17 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
                         setLogs(newLogs);
                       }}
                     />
-                    <div className="flex justify-center">
+                    <div className="flex justify-center items-center gap-1.5">
+                      {supportsCameraCounting(log.exerciseName) && !set.completed && (
+                        <button
+                          onClick={() => setCameraTarget({ logId: log.id, setIdx: idx })}
+                          title="Đếm rep bằng camera"
+                          aria-label="Đếm rep bằng camera"
+                          className="w-8 h-8 rounded-full flex items-center justify-center bg-white/10 text-accent hover:bg-accent/20 transition-all"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </button>
+                      )}
                       <button 
                         onClick={() => {
                             const newLogs = [...logs];
@@ -1454,6 +1471,37 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
             </span>
           </div>
         )}
+
+      <AnimatePresence>
+        {cameraTarget && (() => {
+          const camLog = logs.find(l => l.id === cameraTarget.logId);
+          const camSet = camLog?.sets[cameraTarget.setIdx];
+          if (!camLog || !camSet) return null;
+          return (
+            <Suspense fallback={null}>
+              <CameraRepCounter
+                exerciseName={camLog.exerciseName}
+                targetReps={camSet.reps || 10}
+                onClose={() => setCameraTarget(null)}
+                onFinish={(count) => {
+                  if (count > 0) {
+                    const newLogs = [...logs];
+                    const lIdx = newLogs.findIndex(l => l.id === cameraTarget.logId);
+                    if (lIdx !== -1 && newLogs[lIdx].sets[cameraTarget.setIdx]) {
+                      newLogs[lIdx].sets[cameraTarget.setIdx].reps = count;
+                      newLogs[lIdx].sets[cameraTarget.setIdx].completed = true;
+                      newLogs[lIdx].sets[cameraTarget.setIdx].timestamp = new Date().toISOString();
+                      setLogs(newLogs);
+                      if (restDuration > 0) setRestTimer(restDuration);
+                    }
+                  }
+                  setCameraTarget(null);
+                }}
+              />
+            </Suspense>
+          );
+        })()}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showCancelConfirm && (
