@@ -35,6 +35,7 @@ import WorkoutTemplates from './components/WorkoutTemplates';
 import HealthProfile from './components/HealthProfile';
 import Achievements from './components/Achievements';
 import ProgressView from './components/ProgressView';
+import BodyMeasurements from './components/BodyMeasurements';
 import { fetchExercises } from './services/exerciseService';
 import { Exercise, WorkoutTemplate } from './types';
 
@@ -64,6 +65,7 @@ export default function App() {
   });
 
   const [isInAppWebView, setIsInAppWebView] = useState(false);
+  const [healthView, setHealthView] = useState<'profile' | 'measurements'>('profile');
 
   useEffect(() => {
     const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
@@ -294,7 +296,25 @@ export default function App() {
           )}
           {activeTab === 'history' && <WorkoutHistory />}
           {activeTab === 'progress' && <ProgressView />}
-          {activeTab === 'health' && <HealthProfile />}
+          {activeTab === 'health' && (
+            <div key="health-view" className="space-y-6">
+              <div className="flex gap-2">
+                {([['profile', 'Hồ sơ'], ['measurements', 'Số đo cơ thể']] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setHealthView(key)}
+                    className={cn(
+                      'px-4 py-2 rounded-full text-xs font-mono uppercase tracking-wider border transition-all',
+                      healthView === key ? 'bg-accent border-accent text-white' : 'bg-white/5 border-white/10 text-brand/60'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {healthView === 'profile' ? <HealthProfile /> : <BodyMeasurements />}
+            </div>
+          )}
           {activeTab === 'achievements' && <Achievements />}
         </AnimatePresence>
       </main>
