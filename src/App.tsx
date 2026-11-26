@@ -36,6 +36,8 @@ import HealthProfile from './components/HealthProfile';
 import Achievements from './components/Achievements';
 import ProgressView from './components/ProgressView';
 import BodyMeasurements from './components/BodyMeasurements';
+import ReminderBanner from './components/ReminderBanner';
+import { useWorkoutReminders } from './hooks/useWorkoutReminders';
 import { fetchExercises } from './services/exerciseService';
 import { Exercise, WorkoutTemplate } from './types';
 
@@ -65,6 +67,7 @@ export default function App() {
   });
 
   const [isInAppWebView, setIsInAppWebView] = useState(false);
+  const { reminder, dismiss: dismissReminder } = useWorkoutReminders(user);
   const [healthView, setHealthView] = useState<'profile' | 'measurements'>('profile');
 
   useEffect(() => {
@@ -172,6 +175,24 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-ink flex flex-col md:flex-row">
+      <AnimatePresence>
+        {reminder && (
+          <ReminderBanner
+            reminder={reminder}
+            onDismiss={dismissReminder}
+            onStart={() => {
+              dismissReminder();
+              if (isWorkoutActive) {
+                setIsWorkoutMinimized(false);
+              } else {
+                setActiveTemplate(null);
+                setIsWorkoutActive(true);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-center p-4 border-b border-white/5 sticky top-0 bg-ink/80 backdrop-blur-xl z-40 pt-[calc(1rem+env(safe-area-inset-top))]">
         <div className="flex items-center gap-2">

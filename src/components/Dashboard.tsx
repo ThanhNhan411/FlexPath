@@ -6,6 +6,8 @@ import { invalidateProgressCache } from '../services/progressService';
 import { collection, query, where, orderBy, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Workout, ExerciseLog } from '../types';
 import { cn } from '../lib/utils';
+import StreakCard from './StreakCard';
+import { clampGoal, DEFAULT_WEEKLY_GOAL } from '../lib/streak';
 import { BADGES, calculateAchievementStats, isBadgeUnlocked } from '../lib/achievements';
 
 interface DashboardProps {
@@ -18,6 +20,7 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
   const [unlockedBadges, setUnlockedBadges] = useState<{ badgeId: string, unlockedAt: string }[]>([]);
+  const [weeklyGoal, setWeeklyGoal] = useState(DEFAULT_WEEKLY_GOAL);
   const [selectedWorkout, setSelectedWorkout] = useState<{ workout: Workout, logs: ExerciseLog[] } | null>(null);
   const user = auth.currentUser;
 
@@ -55,6 +58,7 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
         const pSnap = await getDoc(doc(db, 'health_profiles', user.uid));
         if (pSnap.exists()) {
           const profile = pSnap.data();
+          if (profile.weeklyGoal !== undefined) setWeeklyGoal(clampGoal(profile.weeklyGoal));
           if (profile.unlockedAchievements) {
             setUnlockedBadges(profile.unlockedAchievements);
           } else {
@@ -316,6 +320,8 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
           </div>
         ))}
       </div>
+
+      {!loading && <StreakCard workouts={workouts} initialGoal={weeklyGoal} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">

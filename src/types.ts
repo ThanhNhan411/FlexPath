@@ -75,4 +75,6 @@ export interface HealthProfile {
   bmi: number;
   updatedAt: string;
   unlockedAchievements?: UnlockedBadge[];
+  /** Target number of workouts per week (1-7). */
+  weeklyGoal?: number;
 }

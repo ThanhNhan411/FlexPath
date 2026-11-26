@@ -116,13 +116,14 @@ service cloud.firestore {
     // unlockedAchievements may be written before the body metrics exist, so
     // the metrics are optional but range-checked when present.
     function validHealthProfile(d) {
-      return d.keys().hasOnly(['height', 'weight', 'age', 'gender', 'bmi', 'updatedAt', 'unlockedAchievements'])
+      return d.keys().hasOnly(['height', 'weight', 'age', 'gender', 'bmi', 'updatedAt', 'unlockedAchievements', 'weeklyGoal'])
         && d.updatedAt is string
         && (!('height' in d) || (d.height is number && d.height >= 50 && d.height <= 300))
         && (!('weight' in d) || (d.weight is number && d.weight >= 20 && d.weight <= 500))
         && (!('age' in d) || (d.age is number && d.age >= 1 && d.age <= 120))
         && (!('gender' in d) || (d.gender is string && d.gender.size() <= 20))
         && (!('bmi' in d) || d.bmi is number)
+        && (!('weeklyGoal' in d) || (d.weeklyGoal is number && d.weeklyGoal >= 1 && d.weeklyGoal <= 7))
         && (!('unlockedAchievements' in d) || (d.unlockedAchievements is list && d.unlockedAchievements.size() <= 200));
     }
 
