@@ -36,6 +36,7 @@ import HealthProfile from './components/HealthProfile';
 import Achievements from './components/Achievements';
 import ProgressView from './components/ProgressView';
 import BodyMeasurements from './components/BodyMeasurements';
+import NutritionPlanner from './components/NutritionPlanner';
 import ReminderBanner from './components/ReminderBanner';
 import { useWorkoutReminders } from './hooks/useWorkoutReminders';
 import { fetchExercises } from './services/exerciseService';
@@ -68,7 +69,7 @@ export default function App() {
 
   const [isInAppWebView, setIsInAppWebView] = useState(false);
   const { reminder, dismiss: dismissReminder } = useWorkoutReminders(user);
-  const [healthView, setHealthView] = useState<'profile' | 'measurements'>('profile');
+  const [healthView, setHealthView] = useState<'profile' | 'measurements' | 'nutrition'>('profile');
 
   useEffect(() => {
     const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
@@ -320,7 +321,7 @@ export default function App() {
           {activeTab === 'health' && (
             <div key="health-view" className="space-y-6">
               <div className="flex gap-2">
-                {([['profile', 'Hồ sơ'], ['measurements', 'Số đo cơ thể']] as const).map(([key, label]) => (
+                {([['profile', 'Hồ sơ'], ['measurements', 'Số đo cơ thể'], ['nutrition', 'Dinh dưỡng']] as const).map(([key, label]) => (
                   <button
                     key={key}
                     onClick={() => setHealthView(key)}
@@ -333,7 +334,9 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              {healthView === 'profile' ? <HealthProfile /> : <BodyMeasurements />}
+              {healthView === 'profile' && <HealthProfile />}
+              {healthView === 'measurements' && <BodyMeasurements />}
+              {healthView === 'nutrition' && <NutritionPlanner />}
             </div>
           )}
           {activeTab === 'achievements' && <Achievements />}
