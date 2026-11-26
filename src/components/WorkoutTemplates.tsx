@@ -4,6 +4,7 @@ import { Plus, Edit2, Play, Trash2, Dumbbell, History, ChevronRight } from 'luci
 import { WorkoutTemplate, Exercise } from '../types';
 import { fetchUserTemplates, deleteTemplate } from '../services/workoutTemplateService';
 import WorkoutTemplateEditor from './WorkoutTemplateEditor';
+import PresetRoutines from './PresetRoutines';
 import { cn } from '../lib/utils';
 
 interface WorkoutTemplatesProps {
@@ -16,6 +17,7 @@ export default function WorkoutTemplates({ exercises, onStartFromTemplate }: Wor
   const [loading, setLoading] = useState(true);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<WorkoutTemplate | null>(null);
+  const [tab, setTab] = useState<'mine' | 'presets'>('mine');
 
   const loadTemplates = async () => {
     setLoading(true);
@@ -64,7 +66,30 @@ export default function WorkoutTemplates({ exercises, onStartFromTemplate }: Wor
         </button>
       </header>
 
-      {loading ? (
+      <div className="flex gap-2 border-b border-white/5">
+        {([['mine', 'Của tôi'], ['presets', 'Giáo án có sẵn']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={cn(
+              'px-4 py-2 text-xs font-mono uppercase tracking-widest border-b-2 -mb-px transition-colors',
+              tab === key ? 'border-accent text-accent' : 'border-transparent text-brand/40 hover:text-brand/70'
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'presets' && (
+        <PresetRoutines
+          exercises={exercises}
+          onStartFromTemplate={onStartFromTemplate}
+          onSaved={loadTemplates}
+        />
+      )}
+
+      {tab === 'mine' && (loading ? (
         <div className="flex flex-col items-center justify-center py-20 opacity-20 animate-pulse">
           <Dumbbell className="w-12 h-12 mb-4" />
           <p className="text-sm font-mono uppercase tracking-[0.3em]">Đang tải giáo án...</p>
@@ -140,7 +165,7 @@ export default function WorkoutTemplates({ exercises, onStartFromTemplate }: Wor
             </motion.div>
           ))}
         </div>
-      )}
+      ))}
 
       {/* Editor Modal */}
       {isEditorOpen && (

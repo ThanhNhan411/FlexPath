@@ -44,61 +44,92 @@ service cloud.firestore {
     }
 
     // 3. Workouts
+    function validWorkout(d) {
+      return d.keys().hasOnly(['userId', 'name', 'startTime', 'endTime', 'duration', 'status', 'calories', 'totalVolume', 'notes'])
+        && d.status in ['active', 'completed', 'cancelled']
+        && d.startTime is string
+        && (!('name' in d) || (d.name is string && d.name.size() <= 200))
+        && (!('notes' in d) || (d.notes is string && d.notes.size() <= 5000))
+        && (!('endTime' in d) || d.endTime is string)
+        && (!('duration' in d) || (d.duration is number && d.duration >= 0))
+        && (!('calories' in d) || (d.calories is number && d.calories >= 0))
+        && (!('totalVolume' in d) || (d.totalVolume is number && d.totalVolume >= 0));
+    }
+
     match /workouts/{workoutId} {
       allow get: if isSignedIn() && existing().userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      
-      allow create: if isSignedIn() && 
+
+      allow create: if isSignedIn() &&
         incoming().userId == request.auth.uid &&
-        incoming().status in ['active', 'completed'] &&
-        incoming().startTime is string;
-        
-      allow update: if isSignedIn() && 
+        validWorkout(incoming());
+
+      allow update: if isSignedIn() &&
         existing().userId == request.auth.uid &&
-        incoming().userId == existing().userId && (
+        incoming().userId == existing().userId &&
+        validWorkout(incoming()) && (
           // Action: Complete
-          (incoming().status == 'completed' && incoming().diff(existing()).affectedKeys().hasAll(['status', 'endTime'])) ||
+          (incoming().status == 'completed' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'endTime', 'duration', 'calories', 'totalVolume'])) ||
           // Action: Edit Notes
           (incoming().diff(existing()).affectedKeys().hasOnly(['notes', 'name', 'totalVolume']))
         );
-        
+
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
 
-      // 4. Logs (Subcollection)
+      // Logs (Subcollection)
       match /logs/{logId} {
-        allow read, write: if isWorkoutOwner(workoutId);
+        allow read, delete: if isWorkoutOwner(workoutId);
+        allow create, update: if isWorkoutOwner(workoutId) &&
+          incoming().exerciseId is string &&
+          incoming().sets is list &&
+          incoming().sets.size() <= 100;
       }
     }
 
     // 4. Workout Templates
+    function validTemplate(d) {
+      return d.keys().hasOnly(['userId', 'name', 'description', 'exercises', 'createdAt', 'updatedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 100
+        && (!('description' in d) || (d.description is string && d.description.size() <= 1000))
+        && d.exercises is list && d.exercises.size() <= 100
+        && d.updatedAt is string;
+    }
+
     match /workout_templates/{templateId} {
       allow get: if isSignedIn() && existing().userId == request.auth.uid;
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      
-      allow create: if isSignedIn() && 
+
+      allow create: if isSignedIn() &&
         incoming().userId == request.auth.uid &&
-        incoming().name is string &&
-        incoming().name.size() > 0 &&
-        incoming().exercises is list;
-        
-      allow update: if isSignedIn() && 
+        validTemplate(incoming());
+
+      allow update: if isSignedIn() &&
         existing().userId == request.auth.uid &&
-        incoming().userId == existing().userId;
-        
+        incoming().userId == existing().userId &&
+        validTemplate(incoming());
+
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
     // 5. Health Profiles
+    // unlockedAchievements may be written before the body metrics exist, so
+    // the metrics are optional but range-checked when present.
+    function validHealthProfile(d) {
+      return d.keys().hasOnly(['height', 'weight', 'age', 'gender', 'bmi', 'updatedAt', 'unlockedAchievements'])
+        && d.updatedAt is string
+        && (!('height' in d) || (d.height is number && d.height >= 50 && d.height <= 300))
+        && (!('weight' in d) || (d.weight is number && d.weight >= 20 && d.weight <= 500))
+        && (!('age' in d) || (d.age is number && d.age >= 1 && d.age <= 120))
+        && (!('gender' in d) || (d.gender is string && d.gender.size() <= 20))
+        && (!('bmi' in d) || d.bmi is number)
+        && (!('unlockedAchievements' in d) || (d.unlockedAchievements is list && d.unlockedAchievements.size() <= 200));
+    }
+
     match /health_profiles/{userId} {
       allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && 
-        incoming().height is number &&
-        incoming().weight is number &&
-        incoming().age is number &&
-        incoming().gender is string &&
-        incoming().updatedAt is string;
-      allow update: if isOwner(userId) && 
-        incoming().diff(existing()).affectedKeys().hasOnly(['height', 'weight', 'age', 'gender', 'bmi', 'updatedAt']);
+      allow create: if isOwner(userId) && validHealthProfile(incoming());
+      allow update: if isOwner(userId) && validHealthProfile(incoming());
     }
 
     function isWorkoutOwner(workoutId) {

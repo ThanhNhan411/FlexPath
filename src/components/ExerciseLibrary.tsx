@@ -5,6 +5,7 @@ import { Exercise } from '../types';
 import { cn } from '../lib/utils';
 
 import { ExerciseAnimation } from './ExerciseAnimation';
+import { REPDB_ATTRIBUTION } from '../services/exerciseService';
 
 interface ExerciseLibraryProps {
   exercises: Exercise[];
@@ -245,6 +246,12 @@ export default function ExerciseLibrary({ exercises }: ExerciseLibraryProps) {
           ))}
         </AnimatePresence>
       </div>
+
+      <p className="text-center text-[10px] font-mono tracking-widest text-brand/30 pt-4">
+        <a href={REPDB_ATTRIBUTION.url} target="_blank" rel="noopener noreferrer nofollow" className="hover:text-accent">
+          {REPDB_ATTRIBUTION.label}
+        </a>
+      </p>
 
       {displayLimit < filteredExercises.length && (
         <div className="flex justify-center pt-8">

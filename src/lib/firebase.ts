@@ -7,18 +7,34 @@ import {
   getRedirectResult 
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-// Read Firebase configurations from environment variables, fallback to project defaults
+// Firebase configuration comes exclusively from VITE_FIREBASE_* env vars (see .env.example).
+const env = import.meta.env;
+const required = {
+  VITE_FIREBASE_PROJECT_ID: env.VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_APP_ID: env.VITE_FIREBASE_APP_ID,
+  VITE_FIREBASE_API_KEY: env.VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_AUTH_DOMAIN: env.VITE_FIREBASE_AUTH_DOMAIN,
+  VITE_FIREBASE_FIRESTORE_DATABASE_ID: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+};
+const missing = Object.entries(required).filter(([, v]) => !v).map(([k]) => k);
+if (missing.length > 0) {
+  throw new Error(`Missing Firebase env variables: ${missing.join(', ')}. Copy .env.example to .env.local and fill them in.`);
+}
+
+const isLocalHost = typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
 const firebaseConfig = {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "gen-lang-client-0499809255",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:654813650039:web:663a96fca672099477ba72",
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBliVif20UYTGp0Fq2Z-r2NRjgyL6L5Gz0",
-  authDomain: typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+  projectId: env.VITE_FIREBASE_PROJECT_ID,
+  appId: env.VITE_FIREBASE_APP_ID,
+  apiKey: env.VITE_FIREBASE_API_KEY,
+  // On deployed hosts, auth goes through the app's own domain (proxied via vercel.json rewrites).
+  authDomain: typeof window !== "undefined" && !isLocalHost
     ? window.location.hostname
-    : (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "gen-lang-client-0499809255.firebaseapp.com"),
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-724aaa22-5b41-42c4-a3e1-80f0ff203059",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "gen-lang-client-0499809255.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "654813650039",
-  measurementId: ""
+    : env.VITE_FIREBASE_AUTH_DOMAIN,
+  firestoreDatabaseId: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
 const app = initializeApp(firebaseConfig);
