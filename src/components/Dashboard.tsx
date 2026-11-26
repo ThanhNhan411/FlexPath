@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, TrendingUp, Calendar, Trophy, ArrowRight, Activity, Clock, Dumbbell, Trash2, ChevronLeft, Flame } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
+import { invalidateProgressCache } from '../services/progressService';
 import { collection, query, where, orderBy, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Workout, ExerciseLog } from '../types';
 import { cn } from '../lib/utils';
@@ -84,6 +85,7 @@ export default function Dashboard({ onStartWorkout, onViewAllHistory, onViewAchi
   async function deleteWorkout(id: string) {
     try {
       await deleteDoc(doc(db, 'workouts', id));
+      invalidateProgressCache();
       setWorkouts(workouts.filter(w => w.id !== id));
       if (selectedWorkout?.workout.id === id) setSelectedWorkout(null);
     } catch (e) {

@@ -22,7 +22,8 @@ import {
   Loader2,
   Heart,
   Play,
-  Trophy
+  Trophy,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -33,10 +34,11 @@ import ActiveWorkout from './components/ActiveWorkout';
 import WorkoutTemplates from './components/WorkoutTemplates';
 import HealthProfile from './components/HealthProfile';
 import Achievements from './components/Achievements';
+import ProgressView from './components/ProgressView';
 import { fetchExercises } from './services/exerciseService';
 import { Exercise, WorkoutTemplate } from './types';
 
-type Tab = 'dashboard' | 'exercises' | 'routines' | 'history' | 'health' | 'achievements';
+type Tab = 'dashboard' | 'exercises' | 'routines' | 'history' | 'progress' | 'health' | 'achievements';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -223,6 +225,7 @@ export default function App() {
           <SidebarLink active={activeTab === 'routines'} onClick={() => setActiveTab('routines')} icon={Settings} label="Giáo án của tôi" />
           <SidebarLink active={activeTab === 'exercises'} onClick={() => setActiveTab('exercises')} icon={Dumbbell} label="Thư viện bài tập" />
           <SidebarLink active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={HistoryIcon} label="Lịch sử tập" />
+          <SidebarLink active={activeTab === 'progress'} onClick={() => setActiveTab('progress')} icon={TrendingUp} label="Tiến bộ" />
         </nav>
 
         <div className="mt-auto space-y-4 pt-6 border-t border-white/5">
@@ -273,7 +276,24 @@ export default function App() {
             />
           )}
           {activeTab === 'exercises' && <ExerciseLibrary exercises={exercises} />}
+          {(activeTab === 'history' || activeTab === 'progress') && (
+            <div className="md:hidden flex gap-2 mb-4" key="history-switch">
+              {([['history', 'Lịch sử'], ['progress', 'Tiến bộ']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={cn(
+                    'px-4 py-2 rounded-full text-xs font-mono uppercase tracking-wider border transition-all',
+                    activeTab === key ? 'bg-accent border-accent text-white' : 'bg-white/5 border-white/10 text-brand/60'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           {activeTab === 'history' && <WorkoutHistory />}
+          {activeTab === 'progress' && <ProgressView />}
           {activeTab === 'health' && <HealthProfile />}
           {activeTab === 'achievements' && <Achievements />}
         </AnimatePresence>

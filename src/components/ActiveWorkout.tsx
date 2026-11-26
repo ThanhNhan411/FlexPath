@@ -30,6 +30,9 @@ import { ExerciseLog, Exercise, WorkoutTemplate, Workout } from '../types';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { BADGES, Badge } from '../lib/achievements';
 import { getCameraExercise } from '../lib/repCounter';
+import { loadExerciseHistory, invalidateProgressCache, HistoryMap } from '../services/progressService';
+import { isSetPR } from '../lib/progression';
+import ProgressHint from './ProgressHint';
 
 // Loaded on demand: pulls in the pose model runtime only when the camera counter is opened.
 const CameraRepCounter = lazy(() => import('./CameraRepCounter'));
@@ -407,6 +410,19 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
   const [displayLimit, setDisplayLimit] = useState(24);
   const [showPickerFilters, setShowPickerFilters] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [history, setHistory] = useState<HistoryMap | null>(null);
+
+  // Past performance powers the "last time / suggested next" hints and PR badges.
+  useEffect(() => {
+    let cancelled = false;
+    loadExerciseHistory()
+      .then(h => !cancelled && setHistory(h))
+      .catch(e => console.error('Error loading exercise history:', e));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [cameraTarget, setCameraTarget] = useState<{ logId: string; setIdx: number } | null>(null);
 
   const filterOptions = useMemo(() => {
@@ -593,6 +609,7 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
       for (const logWithCal of logsWithCalories) {
         await addDoc(collection(db, `workouts/${workoutRef.id}/logs`), logWithCal);
       }
+      invalidateProgressCache();
       removeWorkoutState();
 
       // --- ACHIEVEMENT CHECK ENGINE ---
@@ -1061,6 +1078,23 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
               </button>
             </div>
             
+            <ProgressHint
+              history={history?.get(log.exerciseId)}
+              targetReps={log.sets[0]?.reps || 10}
+              onApply={(weight, reps) => {
+                const newLogs = [...logs];
+                const lIdx = newLogs.findIndex(l => l.id === log.id);
+                if (lIdx === -1) return;
+                newLogs[lIdx].sets.forEach(st => {
+                  if (!st.completed) {
+                    st.weight = weight;
+                    st.reps = reps;
+                  }
+                });
+                setLogs(newLogs);
+              }}
+            />
+
             <div className="p-4 space-y-4">
               <div className="grid grid-cols-4 text-center opacity-40 text-[10px] font-mono uppercase">
                 <div>Set</div>
@@ -1072,7 +1106,12 @@ export default function ActiveWorkout({ onClose, onComplete, exercises, initialT
               <div className="space-y-2">
                 {log.sets.map((set, idx) => (
                   <div key={idx} className={cn("grid grid-cols-4 items-center gap-2 p-2 rounded-lg transition-colors", set.completed ? "bg-accent/10" : "bg-white/5")}>
-                    <div className="text-center font-mono text-sm opacity-50">{idx + 1}</div>
+                    <div className="text-center font-mono text-sm">
+                      <span className="opacity-50">{idx + 1}</span>
+                      {set.completed && history?.get(log.exerciseId) && isSetPR(history.get(log.exerciseId)!.sessions, set) && (
+                        <span className="block text-[9px] font-bold uppercase text-amber-400" title="Kỷ lục cá nhân mới">PR</span>
+                      )}
+                    </div>
                     <input 
                       type="number"
                       className="bg-transparent text-center font-bold focus:outline-none"

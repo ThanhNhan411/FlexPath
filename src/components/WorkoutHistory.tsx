@@ -18,6 +18,7 @@ import {
   CalendarDays
 } from 'lucide-react';
 import { auth, db } from '../lib/firebase';
+import { invalidateProgressCache } from '../services/progressService';
 import { collection, query, where, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { Workout, ExerciseLog } from '../types';
 import { cn } from '../lib/utils';
@@ -198,6 +199,7 @@ export default function WorkoutHistory() {
     if (!confirm('Bạn có muốn xóa buổi tập này không?')) return;
     try {
       await deleteDoc(doc(db, 'workouts', id));
+      invalidateProgressCache();
       setWorkouts(workouts.filter(w => w.id !== id));
       if (selectedWorkout?.workout.id === id) setSelectedWorkout(null);
     } catch (e) {
